@@ -1,141 +1,56 @@
-# Apexplain: explainroo journey, flow, and a token-cheap MVP
+# Apexplain: phased token-cheap MVP
 
-Map explainroo’s agent-driven user journey and render pipeline, then specify Apexplain as a new, slimmer studio in this repo: same script-then-pictures idea, but a tiny skill, declarative layouts, and one `make` command so agents spend far fewer tokens.
+Agent-run explainer videos in the spirit of [explainroo](https://github.com/vincentsch/explainroo), designed so coding agents spend far fewer tokens: one ~2KB skill, declarative `scenes.json`, and a single `apexplain make` command.
 
-## Implementation todos
+This document is the product and implementation plan. Work is sequenced in six phases so each phase ships a usable CLI surface before the next capability is added.
 
-- [ ] Scaffold Apexplain CLI: init, docs, make --dry-run (parse + schema + duration estimate)
-- [ ] Define scenes.json schema (5 layouts) and compact JSON errors; parse script.md subset
-- [ ] Implement TTS cache, sentence timeline, layout engine, ffmpeg mux for 16:9 and 9:16
-- [ ] Write a ~2KB SKILL.md plus one-line AGENTS.md; port leap-years as the golden example
-- [ ] Add a test that invalid scenes fail with path+fix, and a valid project produces an MP4
+## Implementation phases
 
-## What explainroo is
+- [ ] **Phase 1** — CLI scaffold: init, docs, make --dry-run, doctor
+- [ ] **Phase 2** — script.md parser + scenes.json schema + compact path/rule errors
+- [ ] **Phase 3** — letter-rate duration estimate + synthetic sentence/marker timeline
+- [ ] **Phase 4** — Kokoro TTS, per-scene cache, measured chunk timeline
+- [ ] **Phase 5** — five-layout canvas engine + geometric layout check
+- [ ] **Phase 6** — ffmpeg mux, SKILL.md, leap-years example, golden tests
 
-[explainroo](https://github.com/vincentsch/explainroo) (v0.6.2) is not a GUI. The **user** talks to a coding agent; the **agent** runs a CLI. Two project files become a narrated MP4:
+## Product target
 
-- [`script.md`](https://github.com/vincentsch/explainroo/blob/main/templates/starter/script.md) — spoken words, scene ids, markers
-- [`scenes.js`](https://github.com/vincentsch/explainroo/blob/main/templates/starter/scenes.js) — one function per scene that draws on a canvas API (`s.title`, `s.box`, `at: 'word'` / `'#marker'`)
-- `video.json` — theme, size, voice, captions, watermark, budgets
-
-Local stack: **Kokoro TTS → Whisper word times → Chrome (Playwright) draws frames → ffmpeg mux** with generated music/SFX. Optional paid paths (OpenRouter images/clips, ElevenLabs/Cartesia, YouTube/Buffer/Blotato) only run when the agent invokes them.
-
----
-
-## User experience journey
-
-The human never opens a studio. Their journey is:
-
-```mermaid
-flowchart LR
-  user[User: topic and constraints]
-  agent[Coding agent]
-  cli[explainroo CLI]
-  mp4[MP4 plus srt vtt cover]
-  user --> agent
-  agent -->|"npx --yes explainroo"| cli
-  cli --> mp4
-  agent -->|"path, length, verify"| user
-```
-
-**1. Prompt.** README tells them to paste: *Make me a short explainer about [topic]. Use explainroo: run `npx --yes explainroo docs` and follow it.* Best with Claude Code / Opus 5.5.
-
-**2. Agent setup.** `doctor --fetch` (~860 MB English models, plus Node 20.11, ffmpeg, Chrome). Agent is told to decide look/length/voice itself and ask only when blocked (unclear facts, paid keys, camera footage).
-
-**3. Project.** `init videos/<name> --theme studio --size 16:9 --title "..."`. Starter is intro / main / outro.
-
-**4. Script first.** Agent writes `script.md` (45–120s, ~165–200 wpm). Markers `[#cue]`, `{shown|spoken}`, `[pause]`. Timing of pictures is bound to speech.
-
-**5. Voice.** `voice` synthesizes per scene, Whisper aligns words, speech-check loops on `{shown|spoken}`. Incremental: only changed scenes rebuild.
-
-**6. Pictures.** Agent plans layout, optionally `image`/`clip` (paid), writes `scenes.js` against a large scene API.
-
-**7. Agent QA (expensive).** `check` → `still` / `sheet` (agent *opens images* and judges like a viewer) → fix → `render` → `verify` (loudness, black frames, mix vs voice). Draft render is discouraged; stills are cheaper than full encode.
-
-**8. Handoff.** Agent reports file paths, duration, verify verdict. `package` / `publish` / `share` only if the user asked.
-
-**Token-heavy loops today:** dump `AGENTS.md` (~12 KB) plus many `docs` topics (`scene-api` ~24 KB, `product-demos` ~24 KB, `publishing` ~24 KB); write JS against a huge API; `words` + still/sheet vision passes; pronunciation retry; troubleshooting.md on every layout warning.
-
----
-
-## Program flow
-
-CLI entry: [`bin/explainroo.js`](https://github.com/vincentsch/explainroo/blob/main/bin/explainroo.js) → [`src/cli.js`](https://github.com/vincentsch/explainroo/blob/main/src/cli.js). Shared pipeline is [`src/pipeline.js`](https://github.com/vincentsch/explainroo/blob/main/src/pipeline.js).
-
-```mermaid
-flowchart TD
-  load[loadProject: video.json script.md scenes.js]
-  prep[prepare]
-  tts[synthesize: Kokoro or paid TTS]
-  whisper[Whisper word timestamps]
-  tl[buildTimeline]
-  state[makeState: config plus timeline plus assets hash]
-  chrome[withEngine: local HTTP plus headless Chrome]
-  engine[engine/runtime.js plus stage.js draw frame at t]
-  ffmpeg[src/render.js plus ffmpeg: frames audio music SFX]
-  out[out/video.mp4 srt vtt cover chapters]
-  load --> prep
-  prep --> tts --> whisper --> tl
-  tl --> state --> chrome --> engine --> ffmpeg --> out
-```
-
-**`prepare`:** fonts → `synthesize` → `buildTimeline` → `build/timeline.json`.
-
-**`makeState`:** hashes `scenes.js`, look, assets, config; injects into the engine page (the page does not read project JSON itself).
-
-**`withEngine`:** tiny static server + Playwright Chrome; `still`/`sheet`/`check`/`render` all reuse this.
-
-**Engine:** [`engine/stage.js`](https://github.com/vincentsch/explainroo/blob/main/engine/stage.js) (large drawing API), [`engine/director.js`](https://github.com/vincentsch/explainroo/blob/main/engine/director.js) (camera that tracks spoken cues), captions, Rough.js, Lucide icons, MathJax, code steps, recordings.
-
-**Identity / cache:** `renderIdentity` hashes scenes + engine so stale MP4s are detected; voice is cached separately so engine upgrades do not re-TTS.
-
-**Not in the MVP:** `record`/`capture` product demos, `cut`, AI clips/images, presenters, OAuth publish, 7 themes × many sizes, motion blur (6 samples/frame), web player, formats marketplace.
-
----
-
-## Apexplain MVP (between a new app and a slim fork)
-
-**Product choice:** new codebase in this **Apexplain** repo. Copy *ideas and a few small files* (script grammar, timeline math, ffmpeg mux), **not** the 160 KB `stage.js` / 110 KB `runtime.js` / 40+ CLI commands. MIT-compatible inspiration; do not vendor the whole tree.
-
-**Success metric:** a coding agent can ship a 45–60s English explainer after reading **one skill under ~2 KB**, writing **one JSON (or YAML) scene file**, and running **`apexplain make <dir>`** — no `docs scene-api`, no `words`, no still/sheet vision loop.
-
-### Token budget design (priority)
-
-| explainroo cost | Apexplain cut |
-| --- | --- |
-| AGENTS.md + 20 doc topics in context | One `skills/apexplain/SKILL.md`: init → write script+scenes → `make`. Extra docs only if `make` prints `read: apexplain docs <id>` |
-| Agent writes `scenes.js` against a huge canvas API | Agent fills a **schema**: `layout: cards \| steps \| compare \| flow \| title` + slot text/icons; engine maps to drawing |
-| 11 CLI steps + still/sheet review | `make` = voice + layout-check + render; JSON errors with file:line, not a troubleshooting essay |
-| Cue every spoken word via Whisper + `words` | Cues are **scene start / sentence index / `#marker` only**; sentence times from TTS duration + pause rules (Whisper optional later) |
-| Agent opens PNGs | Layout check is geometric (overflow, overlap, min type size). Vision is out of MVP |
-| Pronunciation retry loop | `{shown\|spoken}` supported; skip speech-to-text confirm in MVP (biggest token + time saver) |
-
-### Agent loop (target)
+Agent loop: read `SKILL.md` once → write `script.md` + `scenes.json` → `apexplain make` → MP4. No Whisper, no vision QA, no publish/record/AI clips.
 
 ```mermaid
 flowchart LR
   brief[User brief]
-  skill[Read SKILL.md once]
-  files[Write script.md and scenes.json]
+  skill[Read SKILL.md]
+  files[script.md plus scenes.json]
   makeCmd[apexplain make]
-  fix[Fix from compact JSON errors]
-  done[MP4 path]
+  fix[Compact JSON errors]
+  done[out/video.mp4]
   brief --> skill --> files --> makeCmd
   makeCmd -->|errors| fix --> makeCmd
   makeCmd -->|ok| done
 ```
+
+### Token budget (vs explainroo)
+
+| explainroo cost | Apexplain cut |
+| --- | --- |
+| AGENTS.md + many doc topics in context | One `skills/apexplain/SKILL.md` under ~2KB; extra docs only when `make` prints `read: apexplain docs <id>` |
+| Agent writes `scenes.js` against a huge canvas API | Agent fills a schema: `layout: title \| cards \| steps \| compare \| flow` |
+| Many CLI steps + still/sheet vision review | `make` = voice + layout-check + render; compact JSON errors |
+| Per-word cues via Whisper | Cues are scene start / sentence index / `#marker` only |
+| Agent opens PNGs to judge frames | Geometric layout check only; vision out of MVP |
 
 ### Project shape
 
 ```
 videos/demo/
   video.json          # title, size 16:9|9:16, theme studio|dark
-  script.md           # same ## scene-id grammar as explainroo starter
+  script.md           # ## scene-id grammar (explainroo subset)
   scenes.json         # declarative layouts, not JS
   out/video.mp4
 ```
 
-Example `scenes.json` (agent-sized, not a drawing API):
+Example `scenes.json`:
 
 ```json
 {
@@ -154,45 +69,114 @@ Example `scenes.json` (agent-sized, not a drawing API):
 
 `cue: "sentence"` reveals item *i* when sentence *i* starts. `#marker` in the script can override. No per-word `at`.
 
-### Runtime (slim, keep working locally)
+## Architecture choices
 
-Keep explainroo’s *shape*, shrink the *surface*:
+- **New Node ESM package** in this repo (`bin/apexplain.js`, `src/`), MIT, inspired by explainroo — do not vendor `stage.js` / `runtime.js` / the 40+ CLI commands.
+- **Reuse ideas from explainroo** (script grammar, letter-rate length estimate, per-scene TTS cache, ffmpeg image2pipe mux). Copy small MIT helpers only when cheaper than rewriting.
+- **Renderer: `@napi-rs/canvas` + system/bundled ffmpeg**, not Chrome/Playwright for v1. Five fixed layouts do not need a browser; this keeps `make` a single Node process. Chrome remains a later option if fidelity demands it.
+- **TTS: Kokoro** via `kokoro-js` + `@huggingface/transformers`. Sentence/`#marker` cues get **exact** times by synthesizing one WAV chunk per sentence/marker boundary — Whisper stays out of MVP.
+- **ffmpeg:** prefer system `ffmpeg` when present; fall back to `ffmpeg-static` so `make` works without a prior brew install.
+- **Kokoro first-run download** (~hundreds of MB) is accepted for this token-first MVP. Agents trim length with `--estimate` / `--dry-run` before TTS when possible.
 
-1. **Parse** `script.md` (subset: `## id`, `[#m]`, `[pause]`, `{shown|spoken}`).
-2. **TTS** — still Kokoro for quality (user chose token savings, not 860 MB cuts). Cache per scene. Estimate length from letters/sec before TTS so the agent can trim the script without synthesizing.
-3. **Timeline** — scene lead/hold + sentence pauses; map cues to sentence start times (no Whisper in MVP).
-4. **Render** — one small HTML canvas or SVG engine with **five layouts only**, Lucide icons subset, one type scale, no camera director / Rough.js / MathJax / recordings.
-5. **ffmpeg** — voice + optional simple bed + hard-burn captions for 9:16.
-6. **CLI:** `init`, `make`, `preview` (optional live reload), `docs <id>`, `--json`.
+### Repo layout after Phase 1
 
-Do **not** implement: publish, record, capture, AI image/clip, 54-voice catalog in the skill, multi-language, motion blur, `check` on arbitrary MP4s.
+```
+package.json, bin/apexplain.js, src/cli.js
+skills/apexplain/SKILL.md   # filled in Phase 6
+AGENTS.md                   # one-line pointer
+templates/starter/          # video.json, script.md, scenes.json
+examples/leap-years/        # filled in Phase 6
+docs/apexplain-token-mvp.md # this plan
+```
 
-### Skill file (the actual token product)
+---
 
-[`skills/apexplain/SKILL.md`](../skills/apexplain/SKILL.md) should fit in one screen:
+## Phase 1 — CLI scaffold + dry-run skeleton
 
-- When to use; command prefix `npx --yes apexplain` (or `node bin/apexplain.js`).
-- Exact `init` + file names + 5 layouts with 4-line examples.
-- Script rules: 45–90s, 8–18 word sentences, one idea per scene, `#markers` optional.
-- `make --json`; on error, edit the cited field; do not read other docs unless the error says so.
-- Never invent numbers; ask once if the topic is empty.
+**Goal:** `npx` / `node bin/apexplain.js` works; `init` creates a project; `make --dry-run` loads files and exits without TTS/render.
 
-[`AGENTS.md`](../AGENTS.md) is a one-line pointer to the skill (avoid duplicating 12 KB).
+- Scaffold: `package.json` (`type: module`, `bin.apexplain`, engines `>=20.11`), `bin/apexplain.js`, `src/cli.js`, `src/errors.js` (`--json` exit shape).
+- Commands: `init <dir>`, `docs [id]`, `make <dir> --dry-run`, `doctor` (Node + ffmpeg presence).
+- `init` writes `video.json` (title, size `16:9|9:16`, theme `studio|dark`), starter `script.md`, starter `scenes.json`.
+- **Exit criteria:** `apexplain init videos/demo` creates files; `apexplain make videos/demo --dry-run` prints “parsed N scenes” (even with stub parsers).
 
-### Implementation order in this repo
+## Phase 2 — Script parser + scenes schema + compact errors
 
-1. Scaffold Node CLI (`bin/apexplain.js`, `src/cli.js`) with `init` / `docs` / `make --dry-run` (parse + schema validate + duration estimate, no TTS).
-2. Script parser + `scenes.json` schema (AJV or hand-rolled) + compact errors.
-3. Timeline from estimated speech (letters/sec) then swap in Kokoro when `make` is real.
-4. Five layout renderers + Playwright/Chrome **or** a single-process canvas if we can avoid Chrome later; start with Chrome for fidelity, one theme, 16:9 + 9:16.
-5. ffmpeg mux + captions.
-6. Skill + a `examples/leap-years` port using `scenes.json` (proof that an agent can describe a real explainer without JS).
-7. A golden test: `make examples/leap-years` exits 0 and writes `out/video.mp4`; invalid scenes.json prints JSON with `path` + `fix`.
+**Goal:** Invalid projects fail with machine-readable `path` + `rule` errors; valid ones parse cleanly.
 
-### Explicit non-goals for v1
+- Port a **subset** of explainroo’s script grammar: `# title`, `## id {hold=…}`, `[#marker]`, `[pause]`, `{shown|spoken}`; ignore `>` notes and HTML comments. English only.
+- Define `scenes.json` schema for five layouts: `title | cards | steps | compare | flow`. Scene ids must match script ids.
+- Cue rules: scene-level `cue: "sentence"` (item *i* ↔ sentence *i*), optional per-item `at` (sentence index) or `marker`.
+- Validate with AJV (or hand-rolled); errors like `{ "path": "scenes.json/orbit/items/2/text", "rule": "required" }`.
+- Wire into `make --dry-run`: parse + validate, no estimate yet.
+- **Exit criteria:** unit tests — bad `scenes.json` fails with path+rule; good starter project parses.
 
-Forking explainroo; matching frame-for-frame look; agent vision QA; Whisper; paid connectors; product-demo recording.
+## Phase 3 — Duration estimate + sentence timeline (no audio yet)
 
-### Risk
+**Goal:** Agents can trim scripts before TTS using letter-rate estimates (~12.7 letters/sec, same idea as explainroo).
 
-Kokoro still downloads ~860 MB — accepted for this token-first MVP. If `make` is too slow for agents, add `make --estimate` (script only) as the default first hop so length cuts happen before TTS.
+- Implement `estimateLength` / `estimateLine` from script + `video.json` (lead/hold/end/pauses).
+- Build a **synthetic timeline**: scene starts, sentence start times from letter proportions + pause rules, `#marker` → sentence-or-chunk start.
+- `make --dry-run` / `make --estimate` prints length range and per-scene seconds; writes `build/timeline.json` (estimated).
+- **Exit criteria:** leap-years-sized script estimates ~45–90s with a printed range; timeline has one entry per scene and per cue.
+
+## Phase 4 — Kokoro TTS + voice cache + real sentence timeline
+
+**Goal:** Real narration WAVs; cues locked to measured chunk durations.
+
+- Lazy-load Kokoro (`onnx-community/Kokoro-82M-v1.0-ONNX`); cache under `~/.cache/apexplain/`.
+- Split speech into chunks at sentence ends and `#marker` boundaries; synthesize per chunk; concatenate with pause silence; write `build/voice/<scene>.wav` + `.json` (hash of spoken text + voice + speed).
+- Rebuild timeline from **measured** chunk durations (exact sentence/`#marker` times). Still no frames.
+- CLI: `make <dir> --voice-only` stops after voice when render is not yet needed.
+- **Exit criteria:** `make <dir> --voice-only` produces WAVs; re-run is a cache hit; timeline times match WAV lengths within ~50ms.
+
+## Phase 5 — Five-layout engine + layout check
+
+**Goal:** Declarative scenes draw correctly; geometric QA replaces vision.
+
+- Small canvas engine (`@napi-rs/canvas`): theme colors, one type scale, Lucide **subset** icons (~30–40), safe margins for 16:9 and 9:16.
+- Layout renderers: `title`, `cards`, `steps`, `compare`, `flow`. Reveal items by cue time (opacity/slide-in).
+- Layout check: overflow, overlap, min type size → compact JSON errors (no PNG review loop).
+- Optional: `preview` / single-frame PNG dump for debugging (not agent-required).
+- **Exit criteria:** each layout renders a still PNG; intentional overflow fails with path+rule.
+
+## Phase 6 — ffmpeg mux + skill + golden example + tests
+
+**Goal:** End-to-end MP4 and the token product (skill).
+
+- Capture frames at fps from the engine; pipe to ffmpeg (h264); mux voice; optional simple bed; hard-burn captions for 9:16; write `out/video.mp4` (+ srt optional).
+- Single command: `apexplain make <dir>` = validate → TTS (cached) → layout-check → render → mux.
+- Write `skills/apexplain/SKILL.md` (~2KB) and one-line `AGENTS.md`.
+- Port `examples/leap-years` to `scenes.json` (no JS).
+- Golden test: valid project → MP4 exists; invalid scenes → JSON with `path` + `rule`.
+- Bump version / tag when this phase lands (next release after the `v0.0.1` plan-only tag).
+- **Exit criteria:** `apexplain make examples/leap-years` exits 0 with `out/video.mp4`; skill alone is enough for an agent to repeat the flow.
+
+---
+
+## Explicit non-goals until after Phase 6
+
+Whisper/word cues, agent still/sheet vision, Rough.js/MathJax/camera director, paid TTS/images/clips, publish/share, product-demo `record`, multi-language, motion blur, 54-voice catalog in the skill. Forking explainroo or matching its look frame-for-frame is also out of scope.
+
+## Dependency map
+
+```mermaid
+flowchart TD
+  p1[Phase1 CLI scaffold]
+  p2[Phase2 parse plus schema]
+  p3[Phase3 estimate timeline]
+  p4[Phase4 Kokoro voice]
+  p5[Phase5 layouts]
+  p6[Phase6 mux skill example]
+  p1 --> p2 --> p3
+  p3 --> p4
+  p2 --> p5
+  p4 --> p6
+  p5 --> p6
+```
+
+Phases 4 and 5 can proceed in parallel after Phase 3 (voice and pictures are independent until mux).
+
+## Suggested first execution slice
+
+Start with **Phase 1 + Phase 2** only: runnable CLI, real parsers/schema, no model download. That gives a clear review point before committing to Kokoro and the renderer.
