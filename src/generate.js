@@ -5,8 +5,8 @@
  * scene show — an order, a comparison, the parts of a whole, or a cause —
  * mapped onto Apexplain's declarative layouts.
  * zh-HK: Wikipedia zh + OpenCC cn→hk so script/scenes stay Traditional (HK).
- * Local-first: uses an intent-based stub by default.
- * Set APEXPLAIN_ALLOW_NET=1 to enrich from Wikipedia (falls back to stub on fail).
+ * Autogenerate tries Wikipedia for on-topic sentences (unless APEXPLAIN_OFFLINE=1),
+ * then falls back to intent stubs that still name the subject. Make/TTS stay local.
  */
 import { toTradHk, zhHkCopy } from './zh.js';
 
@@ -34,12 +34,18 @@ export function extractSubject(title) {
     .replace(/^(who(?:'s| is| are)\s+)/i, '')
     .replace(/^(how\s+(?:do(?:es)?|can|to)\s+)/i, '')
     .replace(/^(why\s+(?:do(?:es)?|is|are|we|does)\s+)/i, '')
+    .replace(/^why\s+/i, '')
     .replace(/^(explain|about|intro(?:duction)?\s+to)\s+/i, '')
     .replace(
       /^(什麼是|什么是|邊個係|边个係|點解有|点解有|點解會|点解会|點解|点解|點樣|点样|如何|簡介|简介)\s*/u,
       '',
     )
     .replace(/[?？！!。.]+$/u, '')
+    // "vaccines work" / "leap years exist" → core noun phrase
+    .replace(
+      /\s+(work|works|working|exist|exists|happen|happens|occur|occurs|mean|means)\s*$/i,
+      '',
+    )
     .trim();
   return t || String(title).trim();
 }
@@ -68,30 +74,62 @@ export async function generateExplainer({ title, lang = 'en' }) {
 }
 
 async function lookupTopic(subject, lang) {
-  // Local-first: Wikipedia only when explicitly opted in.
+  // Make/TTS stay local; Autogenerate may use Wikipedia for topic facts.
   if (process.env.APEXPLAIN_OFFLINE === '1') return null;
-  if (process.env.APEXPLAIN_ALLOW_NET !== '1') return null;
   if (lang === 'zh-HK') {
     const zhTitle = await resolveZhTitle(subject);
     if (zhTitle) {
-      const hit = await wikiBundle('zh', zhTitle);
+      const hit = await wikiBundle('zh', zhTitle, subject);
       if (hit?.sentences?.length) return hit;
     }
     for (const q of uniqueQueries(subject, 'zh-HK')) {
-      const hit = await wikiBundle('zh', q);
+      const hit = await wikiBundle('zh', q, subject);
       if (hit?.sentences?.length && !/^[A-Za-z0-9]/.test(hit.extract || '')) return hit;
     }
     for (const q of uniqueQueries(subject, 'en')) {
-      const hit = await wikiBundle('en', q);
+      const hit = await wikiBundle('en', q, subject);
       if (hit?.sentences?.length) return hit;
     }
     return null;
   }
   for (const q of uniqueQueries(subject, 'en')) {
-    const hit = await wikiBundle('en', q);
+    const hit = await wikiBundle('en', q, subject);
     if (hit?.sentences?.length) return hit;
   }
   return null;
+}
+
+/** Reject Wikipedia pages that drifted away from the subject (e.g. VFC for "vaccines"). */
+function pageRelevant(pageTitle, subject) {
+  const page = normalizeHeading(pageTitle);
+  const sub = normalizeHeading(subject);
+  if (!page || !sub) return false;
+  if (page === sub || page === singularize(sub) || singularize(page) === sub) return true;
+  if (page.includes(sub) || sub.includes(page)) {
+    // "Vaccines for Children Program" contains "vaccines" but is not the topic page.
+    if (
+      /\b(program|programme|act|agency|department|ministry|committee|project|initiative)\b/i.test(
+        pageTitle,
+      ) &&
+      sub.split(/\s+/).length <= 2
+    ) {
+      return false;
+    }
+    return true;
+  }
+  const pt = new Set(page.split(/\s+/).filter((w) => w.length > 2));
+  const st = sub.split(/\s+/).filter((w) => w.length > 2);
+  if (!st.length) return true;
+  const hit = st.filter((w) => pt.has(w) || page.includes(w)).length;
+  return hit / st.length >= 0.6 && page.split(/\s+/).length <= st.length + 2;
+}
+
+function singularize(s) {
+  const t = String(s || '');
+  if (/ies$/i.test(t)) return t.replace(/ies$/i, 'y');
+  if (/ses$/i.test(t)) return t.replace(/ses$/i, 's');
+  if (/s$/i.test(t) && !/ss$/i.test(t)) return t.replace(/s$/i, '');
+  return t;
 }
 
 async function resolveZhTitle(subject) {
@@ -127,19 +165,128 @@ function uniqueQueries(subject, lang) {
   };
   push(subject);
   if (lang !== 'zh-HK') {
-    push(subject.replace(/^(an?|the)\s+/i, ''));
-    push(subject.replace(/\s+/g, '_'));
+    const bare = subject.replace(/^(an?|the)\s+/i, '');
+    push(bare);
+    push(bare.replace(/\s+/g, '_'));
+    // "vaccines" → "vaccine", "leap years" stays
+    if (/ies$/i.test(bare)) push(bare.replace(/ies$/i, 'y'));
+    else if (/ses$/i.test(bare)) push(bare.replace(/ses$/i, 's'));
+    else if (/s$/i.test(bare) && !/ss$/i.test(bare)) push(bare.replace(/s$/i, ''));
   }
   return out;
 }
 
-async function wikiBundle(wiki, title) {
-  const resolved = await wikiSearch(wiki, title);
-  const page = resolved || title;
-  const summary = await wikiSummary(wiki, page);
+async function wikiBundle(wiki, title, subjectForFilter = title) {
+  const candidates = await wikiSearchCandidates(wiki, title, 5);
+  const tryTitles = candidates.length ? candidates : [title];
+  let summary = null;
+  let pageTitle = title;
+  for (const cand of tryTitles) {
+    const hit = await wikiSummary(wiki, cand);
+    if (!hit?.sentences?.length) continue;
+    if (!pageRelevant(hit.pageTitle || cand, subjectForFilter)) continue;
+    summary = hit;
+    pageTitle = hit.pageTitle || cand;
+    break;
+  }
   if (!summary) return null;
-  const sections = await wikiSections(wiki, summary.pageTitle || page);
-  return { ...summary, sections, wiki };
+  const sections = await wikiSections(wiki, pageTitle);
+  const sectionFacts = await wikiSectionFacts(wiki, pageTitle, sections.slice(0, 6));
+  // Prefer lead + section sentences so middle beats have real topic copy.
+  const merged = dedupe([
+    ...(summary.sentences || []),
+    ...sectionFacts.flatMap((s) => s.sentences || []),
+  ]).slice(0, 24);
+  return {
+    ...summary,
+    sentences: merged.length ? merged : summary.sentences,
+    sections,
+    sectionFacts,
+    wiki,
+  };
+}
+
+/**
+ * Plain-text extracts for top sections (for beat-matched narration).
+ */
+async function wikiSectionFacts(wiki, title, headings) {
+  if (!headings?.length) return [];
+  const params = {
+    action: 'query',
+    prop: 'extracts',
+    explaintext: '1',
+    exsectionformat: 'wiki',
+    redirects: '1',
+    titles: title,
+    format: 'json',
+  };
+  if (wiki === 'zh') params.variant = 'zh-hk';
+  const url = `https://${wiki}.wikipedia.org/w/api.php?` + new URLSearchParams(params);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'user-agent': WIKI_UA,
+        accept: 'application/json',
+        ...(wiki === 'zh' ? { 'accept-language': 'zh-HK' } : {}),
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const page = Object.values(data?.query?.pages || {})[0];
+    let extract = String(page?.extract || '');
+    if (!extract) return [];
+    if (wiki === 'zh') extract = toTradHk(extract);
+    const lang = wiki === 'zh' ? 'zh' : 'en';
+    const blocks = splitWikiSections(extract);
+    const want = new Set(headings.map((h) => normalizeHeading(h)));
+    const out = [];
+    for (const block of blocks) {
+      const key = normalizeHeading(block.heading);
+      if (!want.has(key) && !headings.some((h) => key.includes(normalizeHeading(h)) || normalizeHeading(h).includes(key))) {
+        continue;
+      }
+      const sentences = splitSentences(block.text, lang).slice(0, 4);
+      if (!sentences.length) continue;
+      out.push({
+        heading: wiki === 'zh' ? toTradHk(block.heading) : block.heading,
+        sentences,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function normalizeHeading(h) {
+  return String(h || '')
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/gi, ' ')
+    .trim();
+}
+
+/** Split explaintext dump on == Heading == lines. */
+function splitWikiSections(extract) {
+  const text = String(extract || '');
+  const parts = text.split(/\n(?==+[^=].*[^=]=+\s*\n)/);
+  const blocks = [];
+  for (const part of parts) {
+    const m = part.match(/^(=+)\s*([^=]+?)\s*\1\s*\n?([\s\S]*)$/);
+    if (!m) {
+      // Lead paragraph(s) before first heading.
+      if (!blocks.length && part.trim()) {
+        blocks.push({ heading: 'Lead', text: part.trim() });
+      }
+      continue;
+    }
+    const heading = m[2].replace(/<[^>]+>/g, '').trim();
+    const body = m[3].trim();
+    if (!heading || SKIP_SECTIONS.test(heading) || !body) continue;
+    blocks.push({ heading, text: body });
+  }
+  return blocks;
 }
 
 async function wikiSummary(wiki, title) {
@@ -222,12 +369,17 @@ async function wikiExtractZhHk(title) {
 }
 
 async function wikiSearch(wiki, query) {
+  const hits = await wikiSearchCandidates(wiki, query, 1);
+  return hits[0] || null;
+}
+
+async function wikiSearchCandidates(wiki, query, limit = 5) {
   const url =
     `https://${wiki}.wikipedia.org/w/api.php?` +
     new URLSearchParams({
       action: 'opensearch',
       search: query,
-      limit: '1',
+      limit: String(limit),
       namespace: '0',
       format: 'json',
     });
@@ -235,10 +387,9 @@ async function wikiSearch(wiki, query) {
     headers: { 'user-agent': WIKI_UA, accept: 'application/json' },
     signal: AbortSignal.timeout(8000),
   });
-  if (!res.ok) return null;
+  if (!res.ok) return [];
   const data = await res.json();
-  const hit = data?.[1]?.[0];
-  return hit ? String(hit) : null;
+  return (data?.[1] || []).map((h) => String(h)).filter(Boolean);
 }
 
 async function wikiSections(wiki, title) {
@@ -383,58 +534,28 @@ function slugSceneId(label, used) {
   return id;
 }
 
-function scoreSection(heading, intent) {
-  const h = heading.toLowerCase();
-  const weights = {
-    definition: [/etymolog|taxonom|classif|biolog|descript|概[述念]|定義|定义|分類|分类|特徵|特征|外形/, 3],
-    how: [/process|method|mechanism|function|work|步驟|方法|原理|運作|运作|結構|结构/, 3],
-    why: [/cause|reason|effect|impact|consequence|原因|影響|影响|後果|后果|意義|意义/, 3],
-    history: [/history|origin|evolution|develop|歷史|历史|起源|發展|发展|發明|发明/, 3],
-    compare: [/compar|versus|differ|類型|类型|種類|种类|對比|对比/, 3],
-    topic: [/behavior|ecology|culture|use|human|行為|行为|生態|生态|用途|文化|生活/, 2],
-  };
-  const [re, score] = weights[intent] || weights.topic;
-  if (re.test(h)) return score;
-  if (/biology|behavior|ecology|culture|history|taxonomy|distribution|interaction|特徵|生态|用途/.test(h)) {
-    return 1;
-  }
-  return 0;
-}
-
 /**
- * Build a topic-shaped beat list: open + 2–4 middle beats + close.
+ * Explainer beats from intent + subject — not Wikipedia's TOC
+ * (Etymology / Taxonomy / Program history feel "standard", not topic-sensible).
+ * Wikipedia only supplies facts later in buildFromOutline.
  */
 export function planOutline({ intent, topic, subject, facts, lang }) {
-  const name = facts?.pageTitle || subject;
-  const sections = facts?.sections || [];
-  const ranked = sections
-    .map((heading) => ({ heading, score: scoreSection(heading, intent) }))
-    .sort((a, b) => b.score - a.score || a.heading.localeCompare(b.heading));
-
-  const picked = [];
-  for (const row of ranked) {
-    if (picked.length >= 3) break;
-    if (row.score <= 0 && picked.length >= 2) continue;
-    if (picked.some((p) => p.heading === row.heading)) continue;
-    picked.push(row);
-  }
-  // If wiki sections are thin, invent middle beats from intent.
-  if (picked.length < 2) {
-    picked.length = 0;
-    picked.push(...defaultMiddles(intent, name, lang));
-  } else if (picked.length === 1) {
-    picked.push(...defaultMiddles(intent, name, lang).slice(0, 1));
-  }
+  const page =
+    facts?.pageTitle && pageRelevant(facts.pageTitle, subject) ? facts.pageTitle : null;
+  // Open title can use the wiki page name; middle headings use a natural phrase.
+  const openName = page || subject;
+  const phraseName = headingPhrase(subject, page, lang);
+  const middles = topicMiddles(intent, phraseName, lang);
 
   const used = new Set(['open', 'close']);
-  const middles = picked.slice(0, 3).map((row, i) => {
+  const middleBeats = middles.map((row, i) => {
     const heading = row.heading;
-    const id = slugSceneId(heading, used);
     return {
-      id,
+      id: slugSceneId(heading, used),
       role: 'middle',
       heading,
       layout: layoutFor(intent, heading, i),
+      factHints: row.hints || [],
     };
   });
 
@@ -442,10 +563,10 @@ export function planOutline({ intent, topic, subject, facts, lang }) {
     {
       id: 'open',
       role: 'open',
-      heading: lang === 'zh-HK' ? name : name,
+      heading: openName,
       layout: 'title',
     },
-    ...middles,
+    ...middleBeats,
     {
       id: 'close',
       role: 'close',
@@ -455,54 +576,117 @@ export function planOutline({ intent, topic, subject, facts, lang }) {
   ];
 }
 
-function defaultMiddles(intent, name, lang) {
+/** Natural noun phrase for scene headings ("a cat", "leap years", "vaccines"). */
+function headingPhrase(subject, pageTitle, lang) {
+  if (lang === 'zh-HK') return pageTitle || subject;
+  const s = String(subject || pageTitle || 'this topic').trim();
+  if (!s) return 'this topic';
+  const lower = s.toLowerCase();
+  if (/^(a|an|the)\s/i.test(lower)) return lower;
+  if (/^[a-z]+$/i.test(lower)) {
+    // Plural nouns already: vaccines, cats — don't say "a vaccines".
+    if (looksPlural(lower)) return lower;
+    return `a ${lower}`;
+  }
+  return lower;
+}
+
+function looksPlural(word) {
+  const w = String(word || '');
+  if (/ss$/i.test(w) || /us$/i.test(w) || /is$/i.test(w) || /news$/i.test(w)) return false;
+  return /s$/i.test(w);
+}
+
+function verbAgree(name, singular, plural) {
+  const n = String(name || '');
+  if (/^a\s/i.test(n)) return singular;
+  if (/\s/.test(n) || looksPlural(n)) return plural;
+  return singular;
+}
+
+/** Topic-shaped middle scenes for a ~1 min explainer. */
+export function topicMiddles(intent, name, lang) {
   const zh = lang === 'zh-HK';
+  const n = String(name || (zh ? '呢個主題' : 'this topic')).trim();
   switch (intent) {
     case 'definition':
       return zh
-        ? [{ heading: '係咩', score: 2 }, { heading: '特徵', score: 2 }, { heading: '日常生活', score: 1 }]
+        ? [
+            { heading: `${n}係咩`, hints: ['定義', '概述', '特徵', 'biology', 'description', 'domestic'] },
+            { heading: `${n}嘅特點`, hints: ['特徵', '結構', '行為', 'traits', 'behavior', 'intelligence'] },
+            { heading: `同生活嘅關係`, hints: ['用途', '文化', '人類', 'ecology', 'human', 'domestication'] },
+          ]
         : [
-            { heading: 'Definition', score: 2 },
-            { heading: 'Key traits', score: 2 },
-            { heading: 'In everyday life', score: 1 },
+            { heading: `What ${n} is`, hints: ['biology', 'description', 'overview', 'domestic', 'species', 'mammal'] },
+            { heading: `What makes ${n} distinct`, hints: ['traits', 'behavior', 'anatomy', 'intelligence', 'family'] },
+            { heading: `Where you meet ${n}`, hints: ['culture', 'human', 'ecology', 'domestication', 'farmers', 'pet'] },
           ];
     case 'how':
       return zh
-        ? [{ heading: '問題', score: 2 }, { heading: '步驟', score: 3 }, { heading: '結果', score: 2 }]
+        ? [
+            { heading: `要解決咩問題`, hints: ['問題', '背景', 'problem', 'disease', 'infection'] },
+            { heading: `${n}點運作`, hints: ['步驟', '原理', '機制', 'process', 'mechanism', 'immune'] },
+            { heading: `得出咩結果`, hints: ['結果', '效果', 'result', 'effect', 'protect'] },
+          ]
         : [
-            { heading: 'The problem', score: 2 },
-            { heading: 'How it works', score: 3 },
-            { heading: 'The result', score: 2 },
+            {
+              heading: `The problem ${n} ${verbAgree(n, 'addresses', 'address')}`,
+              hints: ['problem', 'disease', 'infection', 'immune', 'pathogen'],
+            },
+            {
+              heading: `How ${n} ${verbAgree(n, 'works', 'work')}`,
+              hints: ['process', 'mechanism', 'immune', 'antigen', 'antibody', 'response'],
+            },
+            { heading: `What protection you get`, hints: ['result', 'effect', 'immunity', 'protect', 'prevent'] },
           ];
     case 'why':
       return zh
-        ? [{ heading: '現象', score: 2 }, { heading: '原因', score: 3 }, { heading: '影響', score: 2 }]
+        ? [
+            { heading: `見到咩現象`, hints: ['現象', '問題', 'calendar', 'year', 'day'] },
+            { heading: `點解會咁`, hints: ['原因', '原理', 'orbit', 'earth', 'sun', '365'] },
+            { heading: `跟住會點`, hints: ['影響', '後果', 'february', 'gregorian', 'calendar'] },
+          ]
         : [
-            { heading: 'The question', score: 2 },
-            { heading: 'The cause', score: 3 },
-            { heading: 'What follows', score: 2 },
+            { heading: `What seems odd about ${n}`, hints: ['calendar', 'year', 'day', 'february', 'common year'] },
+            {
+              heading: `Why ${n} ${verbAgree(n, 'happens', 'happen')}`,
+              hints: ['orbit', 'earth', 'sun', '365', 'fraction', 'corrective'],
+            },
+            { heading: `What that changes`, hints: ['february', '29', 'gregorian', 'calendar', 'day'] },
           ];
     case 'history':
       return zh
-        ? [{ heading: '起源', score: 3 }, { heading: '變化', score: 2 }, { heading: '而家', score: 2 }]
+        ? [
+            { heading: `${n}點開始`, hints: ['起源', '發明', 'origin', 'history'] },
+            { heading: `中間點變`, hints: ['發展', '變化', 'evolution'] },
+            { heading: `而家點樣`, hints: ['現代', '今天', 'today'] },
+          ]
         : [
-            { heading: 'Origins', score: 3 },
-            { heading: 'What changed', score: 2 },
-            { heading: 'Today', score: 2 },
+            { heading: `Where ${n} began`, hints: ['origin', 'history', 'invention'] },
+            { heading: `How ${n} changed`, hints: ['evolution', 'development', 'change'] },
+            { heading: `${n} today`, hints: ['modern', 'today', 'current'] },
           ];
     case 'compare':
       return zh
-        ? [{ heading: '兩邊分別', score: 3 }, { heading: '點揀', score: 2 }]
+        ? [
+            { heading: `兩邊差喺邊`, hints: ['對比', '分別', 'difference', 'versus'] },
+            { heading: `邊種情況更啱`, hints: ['選擇', '用途', 'when', 'choose'] },
+          ]
         : [
-            { heading: 'Side by side', score: 3 },
-            { heading: 'When to choose', score: 2 },
+            { heading: `How the sides differ`, hints: ['difference', 'versus', 'compare'] },
+            { heading: `When to pick which`, hints: ['choose', 'when', 'use'] },
           ];
     default:
       return zh
-        ? [{ heading: `${name}概況`, score: 2 }, { heading: '值得留意', score: 2 }]
+        ? [
+            { heading: `${n}概況`, hints: ['概述', '定義', 'overview'] },
+            { heading: `值得記住`, hints: ['重點', '特徵', 'key'] },
+            { heading: `實際例子`, hints: ['例子', '用途', 'example', 'use'] },
+          ]
         : [
-            { heading: `About ${name}`, score: 2 },
-            { heading: 'Worth noticing', score: 2 },
+            { heading: `The idea behind ${n}`, hints: ['overview', 'definition', 'idea'] },
+            { heading: `What to notice`, hints: ['key', 'trait', 'important'] },
+            { heading: `A concrete example`, hints: ['example', 'use', 'case'] },
           ];
   }
 }
@@ -584,26 +768,84 @@ export function sceneRelation(intent, headingLower) {
 
 function buildFromOutline({ topic, subject, intent, facts, outline, lang }) {
   const zh = lang === 'zh-HK';
-  const rawName = facts?.pageTitle || subject;
+  const rawName =
+    facts?.pageTitle && pageRelevant(facts.pageTitle, subject) ? facts.pageTitle : subject;
   const name = zh ? zhHkCopy(rawName) : rawName;
-  const spoken = !zh && /^[A-Z][a-z]+$/.test(name) ? name.toLowerCase() : name;
-  const rawDesc = facts?.description || (zh ? `${name}嘅簡介` : `a clear look at ${spoken}`);
-  const desc = zh ? zhHkCopy(rawDesc) : rawDesc;
-  let sentences = dedupe(
+  // Short spoken subject ("cat", "leap years") — not the full question title.
+  const core = zh ? name : String(subject || name).trim();
+  const spoken = !zh && /^[A-Z][a-z]+$/.test(core) ? core.toLowerCase() : core;
+  const spokenHook =
+    !zh && spoken && !/^(a|an|the)\s/i.test(spoken) && !/\s/.test(spoken) && !looksPlural(spoken)
+      ? `the ${spoken}`
+      : spoken;
+
+  const sectionFacts = (facts?.sectionFacts || []).map((sf) => ({
+    heading: zh ? zhHkCopy(sf.heading) : sf.heading,
+    sentences: dedupe((sf.sentences || []).map((s) => (zh ? zhHkCopy(s) : s))),
+  }));
+  const leadSentences = dedupe(
     (facts?.sentences || []).map((s) => (zh ? zhHkCopy(s) : s)),
   );
-  // Localize outline headings for zh-HK so script + scenes never keep Simplified.
+  const allFacts = dedupe([
+    ...leadSentences,
+    ...sectionFacts.flatMap((sf) => sf.sentences || []),
+  ]);
+
+  const rawDesc =
+    facts?.description ||
+    leadSentences[0] ||
+    (zh ? `${name}嘅簡介` : `what ${spokenHook} is and why it matters`);
+  const desc = zh ? zhHkCopy(rawDesc) : rawDesc;
+
   if (zh) {
     for (const beat of outline) {
       beat.heading = zhHkCopy(beat.heading);
     }
   }
 
-  const pool = [...sentences];
-  const take = (n = 1) => {
+  const used = new Set();
+  const takeFrom = (list, n = 1) => {
     const out = [];
-    while (out.length < n && pool.length) out.push(pool.shift());
+    for (const s of list || []) {
+      if (out.length >= n) break;
+      if (used.has(s)) continue;
+      used.add(s);
+      out.push(s);
+    }
     return out;
+  };
+
+  const bitsForBeat = (beat) => {
+    const hints = [...(beat.factHints || []), beat.heading, subject, name];
+    const ranked = allFacts
+      .filter((s) => !used.has(s))
+      .map((s) => ({ s, score: scoreFactForBeat(s, hints) }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score);
+    let bits = takeFrom(
+      ranked.map((r) => r.s),
+      2,
+    );
+    // Section bodies that match hints.
+    if (bits.length < 2) {
+      for (const sf of sectionFacts) {
+        if (bits.length >= 2) break;
+        const h = normalizeHeading(sf.heading);
+        const ok = hints.some((hint) => {
+          const k = normalizeHeading(hint);
+          return k && (h.includes(k) || k.includes(h));
+        });
+        if (!ok) continue;
+        bits = bits.concat(takeFrom(sf.sentences, 2 - bits.length));
+      }
+    }
+    if (bits.length < 2) bits = bits.concat(takeFrom(leadSentences, 2 - bits.length));
+    if (bits.length < 2) {
+      bits = bits.concat(
+        stubLinesForBeat({ beat, name, spoken, intent, lang }).slice(0, 2 - bits.length),
+      );
+    }
+    return bits.slice(0, 2);
   };
 
   const topicTitle = zh ? zhHkCopy(topic) : topic;
@@ -612,15 +854,24 @@ function buildFromOutline({ topic, subject, intent, facts, outline, lang }) {
 
   for (const beat of outline) {
     if (beat.role === 'open') {
+      const hookFact = takeFrom(leadSentences, 1)[0];
       const line = zh
-        ? `[#hook] 今日用大概一分鐘講「${name}」。[#angle] 呢條片跟住「${intentLabel(intent, 'zh')}」嘅思路，講清楚重點——${desc}。`
-        : `[#hook] Let's talk about ${spoken}. [#angle] This one-minute video follows a ${intentLabel(intent, 'en')} angle—${desc}.`;
+        ? `[#hook] 今日用大概一分鐘講「${name}」。[#angle] ${
+            hookFact
+              ? ensureStop(hookFact, lang)
+              : `我哋會用「${intentLabel(intent, 'zh')}」嘅角度，講清楚重點。`
+          }`
+        : `[#hook] Let's talk about ${spokenHook}. [#angle] ${
+            hookFact
+              ? ensureStop(hookFact, lang)
+              : `In about a minute we'll unpack ${spokenHook} clearly.`
+          }`;
       scriptParts.push(`## ${beat.id}`, line, '');
       scenes[beat.id] = {
         layout: 'title',
         title: name,
         subtitle:
-          shortLabel(desc, zh ? 36 : 72, { zh, maxWords: 12 }) ||
+          shortLabel(hookFact || desc, zh ? 36 : 72, { zh, maxWords: 12 }) ||
           (zh ? '大約一分鐘講清楚' : 'About one minute'),
       };
       continue;
@@ -628,7 +879,6 @@ function buildFromOutline({ topic, subject, intent, facts, outline, lang }) {
 
     if (beat.role === 'close') {
       const midHeadings = outline.filter((b) => b.role === 'middle').map((b) => b.heading);
-      const midNames = midHeadings.join(zh ? '、' : ' · ');
       const takeaway = midHeadings[0]
         ? zh
           ? `記住：${midHeadings.slice(0, 2).join('、')}`
@@ -636,7 +886,9 @@ function buildFromOutline({ topic, subject, intent, facts, outline, lang }) {
         : name;
       const line = zh
         ? `[#close] 記住「${name}」：${midHeadings.join('、') || '幾個重點'}。[#thanks] 多謝收看。`
-        : `[#close] Remember ${spoken} through ${midHeadings.join(', ') || 'these points'}. [#thanks] Thanks for watching.`;
+        : `[#close] So for ${spokenHook}, hold onto ${
+            midHeadings.slice(0, 2).join(' and ') || 'these beats'
+          }. [#thanks] Thanks for watching.`;
       scriptParts.push(`## ${beat.id} {hold=1.5}`, line, '');
       scenes[beat.id] = {
         layout: 'title',
@@ -646,15 +898,8 @@ function buildFromOutline({ topic, subject, intent, facts, outline, lang }) {
       continue;
     }
 
-    // Middle beat — narration tied to this heading, not a generic template slot.
-    const bits = take(2);
-    while (bits.length < 2) {
-      bits.push(
-        zh
-          ? `關於「${beat.heading}」，記住佢同「${name}」點樣扯上關係。`
-          : `On ${beat.heading.toLowerCase()}, notice how it connects to ${spoken}.`,
-      );
-    }
+    // Middle: topic heading + facts matched to this beat (not a wiki TOC dump).
+    const bits = bitsForBeat(beat);
     const narr = zh
       ? `[#point] ${beat.heading}。[#fact] ${ensureStop(bits[0], lang)} [#more] ${ensureStop(bits[1], lang)}`
       : `[#point] ${beat.heading}. [#fact] ${ensureStop(bits[0], lang)} [#more] ${ensureStop(bits[1], lang)}`;
@@ -670,6 +915,100 @@ function buildFromOutline({ topic, subject, intent, facts, outline, lang }) {
     intent,
     outline: outline.map((b) => ({ id: b.id, role: b.role, heading: b.heading, layout: b.layout })),
   };
+}
+
+function scoreFactForBeat(sentence, hints) {
+  const s = normalizeHeading(sentence);
+  if (!s) return 0;
+  let score = 0;
+  for (const hint of hints || []) {
+    const k = normalizeHeading(hint);
+    if (!k || k.length < 2) continue;
+    if (s.includes(k)) score += k.length > 6 ? 3 : 2;
+    for (const tok of k.split(/\s+/)) {
+      if (tok.length > 3 && s.includes(tok)) score += 1;
+    }
+  }
+  return score;
+}
+
+/** Offline / thin-wiki fallback that still talks about the subject. */
+function stubLinesForBeat({ beat, name, spoken, intent, lang }) {
+  const zh = lang === 'zh-HK';
+  const n = zh ? name : spoken;
+  const h = String(beat.heading || '').trim();
+  if (zh) {
+    switch (intent) {
+      case 'definition':
+        return [
+          `簡單嚟講，「${n}」就係大家日常會聽到、但未必講得清嘅概念。`,
+          `捉住「${h}」呢一點，成個主題就會清楚好多。`,
+        ];
+      case 'how':
+        return [
+          `要明白「${n}」，先要睇清楚過程入面嘅關鍵一步。`,
+          `跟住呢個次序，就解釋到「${n}」點樣得出結果。`,
+        ];
+      case 'why':
+        return [
+          `點解要搞「${n}」？通常係為咗修正一個容易忽略嘅偏差。`,
+          `明白呢個原因，就知「${n}」點解出現喺日曆同生活入面。`,
+        ];
+      case 'history':
+        return [
+          `「${n}」唔係一開始就係而家咁，而係一步步演變出嚟。`,
+          `睇清楚轉變，先會明而家點樣用「${n}」。`,
+        ];
+      case 'compare':
+        return [
+          `比較嘅時候，最緊要分清兩邊差喺邊。`,
+          `分得清，先會知邊種情況更啱用「${n}」。`,
+        ];
+      default:
+        return [
+          `講「${n}」，先記住最核心嗰兩個重點就夠。`,
+          `有咗呢啲錨點，之後再加細節都唔會亂。`,
+        ];
+    }
+  }
+  switch (intent) {
+    case 'definition':
+      return [
+        `${capitalize(n)} is a real-world thing people name often but rarely define cleanly.`,
+        `This beat focuses on ${h.toLowerCase()} so the rest of the story has a solid anchor.`,
+      ];
+    case 'how':
+      return [
+        `${capitalize(n)} only makes sense if you see the process in order.`,
+        `Walk the steps under “${h}”, and the outcome stops feeling like magic.`,
+      ];
+    case 'why':
+      return [
+        `${capitalize(n)} exists to fix a mismatch that builds up if you ignore it.`,
+        `Once you see that cause, “${h.toLowerCase()}” is the natural next beat.`,
+      ];
+    case 'history':
+      return [
+        `${capitalize(n)} did not arrive fully formed — it changed across time.`,
+        `Those shifts still explain how people use ${n} today.`,
+      ];
+    case 'compare':
+      return [
+        `The useful move is to split ${n} into clear sides, not vague vibes.`,
+        `With that contrast, you can choose which side fits the moment.`,
+      ];
+    default:
+      return [
+        `Start with the core idea behind ${n}, then add only the details that earn their place.`,
+        `If you can explain “${h.toLowerCase()}” in one breath, you understand the topic.`,
+      ];
+  }
+}
+
+function capitalize(s) {
+  const t = String(s || '');
+  if (!t) return t;
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 function intentLabel(intent, lang) {

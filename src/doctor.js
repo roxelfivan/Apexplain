@@ -92,12 +92,10 @@ function checkCjkFont({ required }) {
 
 function checkLocalPolicy() {
   const allowHf = process.env.APEXPLAIN_ALLOW_HF === '1';
-  const allowNet = process.env.APEXPLAIN_ALLOW_NET === '1';
   const offline = process.env.APEXPLAIN_OFFLINE === '1';
   const parts = [];
-  parts.push(allowHf ? 'HF download ON' : 'HF local-only');
-  parts.push(allowNet ? 'Wikipedia ON' : 'autogenerate local stub');
-  if (offline) parts.push('APEXPLAIN_OFFLINE=1');
+  parts.push(allowHf ? 'HF download ON' : 'TTS local-only');
+  parts.push(offline ? 'autogenerate stub-only' : 'autogenerate may use Wikipedia');
   return {
     name: 'local',
     ok: true,

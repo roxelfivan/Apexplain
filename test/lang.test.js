@@ -11,6 +11,7 @@ import { parseScript, speechChunks } from '../src/script.js';
 import {
   detectIntent,
   extractSubject,
+  generateExplainer,
   layoutFor,
   planOutline,
   sceneRelation,
@@ -64,6 +65,8 @@ describe('extractSubject', () => {
   it('strips What is / 點解 prefixes', () => {
     assert.equal(extractSubject('What is a cat?'), 'cat');
     assert.equal(extractSubject('點解有閏年'), '閏年');
+    assert.equal(extractSubject('Why leap years exist'), 'leap years');
+    assert.equal(extractSubject('How do vaccines work?'), 'vaccines');
   });
 });
 
@@ -74,7 +77,7 @@ describe('autogenerate outline', () => {
     assert.equal(detectIntent('點解有閏年'), 'why');
   });
 
-  it('builds a topic-shaped outline, not a fixed what/why/how/example chain', () => {
+  it('builds topic-sensible beats, not Wikipedia TOC or legacy what/why/how slots', () => {
     const outline = planOutline({
       intent: 'definition',
       topic: 'What is a cat?',
@@ -87,12 +90,13 @@ describe('autogenerate outline', () => {
       },
     });
     const ids = outline.map((b) => b.id);
+    const headings = outline.map((b) => b.heading).join(' | ');
     assert.equal(ids[0], 'open');
     assert.equal(ids[ids.length - 1], 'close');
-    assert.ok(outline.some((b) => /biology|taxonom|behavior|etymolog/i.test(b.heading)));
-    assert.equal(outline.some((b) => b.id === 'what' && b.id === 'why'), false);
-    // Fixed legacy slots should not be forced
-    assert.ok(!ids.includes('what') || !ids.includes('example'));
+    // Explainer-shaped, about the subject — not Etymology/Taxonomy.
+    assert.match(headings, /what a cat is|makes a cat distinct|meet a cat/i);
+    assert.ok(!/etymolog|taxonom/i.test(headings));
+    assert.ok(!ids.includes('example'));
   });
 
   it('maps layouts like explainroo picture relationships', () => {
@@ -128,6 +132,40 @@ describe('autogenerate outline', () => {
     const spoken = zhHkCopy('这是闰年');
     assert.match(spoken, /閏年/);
     assert.ok(!/[这闰猫]/.test(spoken));
+  });
+
+  it('writes English subject-named stubs offline (no generic filler)', async () => {
+    const prev = process.env.APEXPLAIN_OFFLINE;
+    process.env.APEXPLAIN_OFFLINE = '1';
+    try {
+      const stub = await generateExplainer({ title: 'Why leap years exist', lang: 'en' });
+      assert.match(stub.script, /leap years/i);
+      assert.equal(stub.source, 'fallback');
+      assert.ok(!/etymolog|taxonom|notice how it connects/i.test(stub.script));
+      assert.ok(!/Why leap years exist exists/i.test(stub.script));
+      assert.match(stub.outline.map((b) => b.heading).join(' '), /why leap years happens|seems odd/i);
+    } finally {
+      if (prev == null) delete process.env.APEXPLAIN_OFFLINE;
+      else process.env.APEXPLAIN_OFFLINE = prev;
+    }
+  });
+
+  it('pulls on-topic English Wikipedia copy when online', async () => {
+    const prev = process.env.APEXPLAIN_OFFLINE;
+    delete process.env.APEXPLAIN_OFFLINE;
+    try {
+      const g = await generateExplainer({ title: 'What is a cat?', lang: 'en' });
+      assert.equal(g.intent, 'definition');
+      assert.match(g.script, /cat/i);
+      assert.ok(!/etymology and naming|taxonomy/i.test(g.script));
+      assert.ok(
+        g.source === 'en.wikipedia.org' || /domestic|feline|species|pet|mammal/i.test(g.script),
+        `expected wiki facts or mammal/pet language, got source=${g.source}\n${g.script.slice(0, 400)}`,
+      );
+    } finally {
+      if (prev == null) delete process.env.APEXPLAIN_OFFLINE;
+      else process.env.APEXPLAIN_OFFLINE = prev;
+    }
   });
 });
 

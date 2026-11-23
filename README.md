@@ -43,7 +43,7 @@ After setup, **make / UI / preview / voice** use only on-disk assets — no Hugg
 | Path | Network? |
 |------|----------|
 | `make`, `preview`, `ui` Make video | **No** — Kokoro from `~/.cache/apexplain`, Vocello from local MLX models, ffmpeg/canvas/fonts from disk |
-| Autogenerate | **No** by default (local outline stub). Opt in: `APEXPLAIN_ALLOW_NET=1` for Wikipedia |
+| Autogenerate | **Yes, Wikipedia** for on-topic script facts (falls back to subject stubs). Set `APEXPLAIN_OFFLINE=1` to force stubs |
 | `npm run setup:kokoro` | **Once** — downloads ~88 MB into the local cache |
 | `npm run setup:vocello` | **Once** — Vocello downloads ~2.23 GB Voice Design weights |
 
@@ -52,8 +52,7 @@ Env knobs:
 | Variable | Effect |
 |----------|--------|
 | `APEXPLAIN_ALLOW_HF=1` | Allow Hugging Face download at Kokoro load (setup script sets this) |
-| `APEXPLAIN_ALLOW_NET=1` | Allow Wikipedia during Autogenerate |
-| `APEXPLAIN_OFFLINE=1` | Force stub autogenerate; still requires local TTS weights |
+| `APEXPLAIN_OFFLINE=1` | Force stub Autogenerate (no Wikipedia); TTS still needs local weights |
 | `APEXPLAIN_TTS=mock` | No models (tests) |
 
 ## Installation

@@ -2,9 +2,11 @@
  * zh-HK TTS via Vocello CLI (external binary — no npm/Python deps).
  * MVP: Voice Design + Cantonese brief → WAV. Requires Apple Silicon +
  * `vocello models install pro_design_speed`.
+ * Generate uses async spawn so UI/SSE can stream one log line per chunk
+ * (same as English Kokoro), instead of blocking on spawnSync.
  * https://github.com/PowerBeef/Vocello
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -36,7 +38,8 @@ function whichVocello() {
   return null;
 }
 
-function runVocello(bin, args, timeout = 300000) {
+/** Sync helper for doctor/probe only (short commands). */
+function runVocelloSync(bin, args, timeout = 30000) {
   const r = spawnSync(bin, args, {
     encoding: 'utf8',
     timeout,
@@ -49,6 +52,60 @@ function runVocello(bin, args, timeout = 300000) {
     stderr: r.stderr || '',
     error: r.error,
   };
+}
+
+/**
+ * Async Vocello run — does not block the Node event loop, so SSE log lines
+ * can flush between Chinese chunks the same way English Kokoro does.
+ */
+function runVocelloAsync(bin, args, timeout = 600000) {
+  return new Promise((resolve) => {
+    const child = spawn(bin, args, {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
+      resolve({
+        status: null,
+        stdout,
+        stderr: stderr || `vocello timed out after ${timeout}ms`,
+        error: new Error('timeout'),
+      });
+    }, timeout);
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (d) => {
+      stdout += d;
+      if (stdout.length > 8 * 1024 * 1024) stdout = stdout.slice(-4 * 1024 * 1024);
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+      if (stderr.length > 8 * 1024 * 1024) stderr = stderr.slice(-4 * 1024 * 1024);
+    });
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ status: null, stdout, stderr, error });
+    });
+    child.on('close', (status) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr, error: null });
+    });
+  });
 }
 
 function parseJsonEnvelope(stdout) {
@@ -79,7 +136,7 @@ export function probeVocello() {
       fix: 'Install Vocello CLI: https://github.com/PowerBeef/Vocello/releases — then: vocello models install pro_design_speed',
     };
   }
-  const ver = runVocello(bin, ['--version'], 15000);
+  const ver = runVocelloSync(bin, ['--version'], 15000);
   if (ver.error || ver.status !== 0) {
     return {
       ok: false,
@@ -90,7 +147,7 @@ export function probeVocello() {
   }
   const version = (ver.stdout || ver.stderr || '').trim().split('\n')[0].slice(0, 80);
 
-  const models = runVocello(bin, ['models', 'list', '--json'], 30000);
+  const models = runVocelloSync(bin, ['models', 'list', '--json'], 30000);
   const body = parseJsonEnvelope(models.stdout);
   const list = body?.result?.models || body?.models || [];
   const entry = Array.isArray(list)
@@ -143,7 +200,7 @@ export function createVocelloWorker({ log = () => {} } = {}) {
         os.tmpdir(),
         `apexplain-vocello-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`,
       );
-      const r = runVocello(
+      const r = await runVocelloAsync(
         bin,
         [
           'generate',
@@ -159,6 +216,9 @@ export function createVocelloWorker({ log = () => {} } = {}) {
           tmp,
           '--json',
           '--no-input',
+          // Keep each Apexplain chunk as one take (matches EN per-chunk progress).
+          '--long-form',
+          'never',
           '--wait-for-engine',
         ],
         600000,
@@ -207,6 +267,8 @@ function createMockVocello() {
         const envAmp = Math.min(1, i / (sr * 0.02), (n - i) / (sr * 0.05));
         audio[i] = Math.sin((2 * Math.PI * 220 * i) / sr) * 0.18 * envAmp;
       }
+      // Yield so mock zh-HK also streams chunk logs like real async TTS.
+      await new Promise((r) => setImmediate(r));
       return { audio, sampling_rate: sr };
     },
     async close() {},

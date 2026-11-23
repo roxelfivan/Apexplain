@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.3 — 2026-11-24
+
+### Added
+- Topic-sensible **Autogenerate** outlines (intent + subject beats); Wikipedia supplies facts, not TOC scene titles
+- Live Output progress for **zh-HK**: one line per Vocello chunk (async spawn + SSE flush), matching English
+
+### Changed
+- Autogenerate may use Wikipedia by default for on-topic copy (`APEXPLAIN_OFFLINE=1` forces stubs); make/TTS stay local
+- Stronger English/Chinese subject extraction and page relevance (avoids off-topic wiki hits)
+- Offline stubs name the subject instead of generic filler
+
+### Fixed
+- English Autogenerate scripts that felt “standard” (Etymology/Taxonomy) instead of explainer-shaped
+- Chinese make Output buffering until a whole scene finished
+
 ## 0.0.2 — 2026-11-24
 
 ### Added

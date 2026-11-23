@@ -10,8 +10,8 @@
 #              Requires Vocello Mac CLI first:
 #              https://github.com/PowerBeef/Vocello/releases
 #
-# Optional network (off by default):
-#   APEXPLAIN_ALLOW_HF=1   — allow Hugging Face during Kokoro load
-#   APEXPLAIN_ALLOW_NET=1  — allow Wikipedia during Autogenerate
+# Network:
+#   APEXPLAIN_ALLOW_HF=1   — allow Hugging Face during Kokoro load (setup sets this)
+#   Autogenerate may call Wikipedia for topic facts (disable with APEXPLAIN_OFFLINE=1)
 #
 # See README.md → Requirements / Dependencies / Local-first / Installation.

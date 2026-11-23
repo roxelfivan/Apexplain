@@ -101,13 +101,19 @@ async function renderScene({ scene, chunks, hash, video, tts, paths, log }) {
     if (!/[\p{L}\p{N}]/u.test(chunk.text)) {
       continue;
     }
+    // Same progress shape for EN (Kokoro) and zh-HK (Vocello): one Output line
+    // as each chunk finishes. Yield after the start line so SSE can flush before
+    // a long Vocello take (async spawn — not spawnSync).
     log(`voice ${scene.id}: chunk ${ci + 1}/${chunks.length}`);
+    await new Promise((r) => setImmediate(r));
     const audio = await tts.generate(chunk.text, { voice: video.voice, speed });
     const samples = trimSilence(audio.audio, audio.sampling_rate || sr);
     const start = cursor / sr;
     const dur = samples.length / sr;
     pieces.push(samples);
     cursor += samples.length;
+    log(`voice ${scene.id}: chunk ${ci + 1}/${chunks.length} done (${round(dur)}s)`);
+    await new Promise((r) => setImmediate(r));
 
     for (const name of chunk.marks || []) {
       marks[name] = round(start);

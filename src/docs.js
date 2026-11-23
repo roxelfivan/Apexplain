@@ -22,7 +22,7 @@ Apexplain turns \`script.md\` + \`scenes.json\` into a narrated MP4.
 5. Or open the UI: \`apexplain ui --port 3847\`.
 
 \`lang=en\` → local Kokoro. \`lang=zh-HK\` → local Vocello CLI (Voice Design + Cantonese brief; \`npm run setup:vocello\`).
-Runtime is local-first (no HF / Wikipedia unless \`APEXPLAIN_ALLOW_HF=1\` / \`APEXPLAIN_ALLOW_NET=1\`).
+Make/TTS are local-first (HF only with \`APEXPLAIN_ALLOW_HF=1\`). Autogenerate may use Wikipedia for on-topic copy.
 
 Layouts: \`title\`, \`cards\`, \`steps\`, \`compare\`, \`flow\`. Output: \`out/video.mp4\`.
 `,

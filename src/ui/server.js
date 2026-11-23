@@ -260,6 +260,11 @@ async function handleApi(req, res, url) {
       const send = (event, data) => {
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
+      // Flush after each log so zh-HK Vocello chunks appear one-by-one like English.
+      const logLine = async (line) => {
+        send('log', { line: String(line) });
+        await new Promise((r) => setImmediate(r));
+      };
       send('status', { state: 'started', dryRun: !!body.dryRun });
       try {
         const result = await make(dir, {
@@ -267,7 +272,7 @@ async function handleApi(req, res, url) {
           voiceOnly: !!body.voiceOnly,
           draft: body.draft !== false,
           force: !!body.force,
-          log: (line) => send('log', { line: String(line) }),
+          log: logLine,
         });
         send('status', { state: 'done' });
         send('done', result);

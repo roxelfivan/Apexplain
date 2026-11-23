@@ -258,7 +258,7 @@ async function autogenerate() {
   clearLog();
   setOutputStatus('generating…', 'busy');
   revealOutput();
-  log('Autogenerating a local topic-shaped ~1 min outline…');
+  log('Autogenerating a topic-shaped ~1 min script (Wikipedia when online)…');
   try {
     let video;
     try {
@@ -279,7 +279,7 @@ async function autogenerate() {
     const src =
       data.source && data.source !== 'fallback'
         ? ` from ${data.source}`
-        : ' (local stub — set APEXPLAIN_ALLOW_NET=1 for Wikipedia)';
+        : ' (topic stub — offline or no Wikipedia hit)';
     const subj = data.subject ? ` about “${data.subject}”` : '';
     const shape =
       Array.isArray(data.outline) && data.outline.length
