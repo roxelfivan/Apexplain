@@ -57,6 +57,7 @@ export function drawSceneFrame(ctx, { video, sceneId, layout, sceneTimeline = nu
     sceneId,
     sceneLocalT: t,
     sceneTimeline,
+    lang: video?.lang || 'en',
     els,
   });
   return els;

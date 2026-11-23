@@ -5,6 +5,8 @@
 import { speechChunks } from './script.js';
 
 const LETTERS_A_SECOND = 12.7;
+/** Approximate HK Cantonese speaking rate (Han chars / sec) for estimates. */
+const CJK_CHARS_A_SECOND = 4.6;
 const SPREAD = 0.06;
 const LETTERS_A_DIGIT = 4;
 const DEFAULT_SENTENCE_GAP = 0.3;
@@ -40,7 +42,10 @@ const VOICE_RATES = {
 const tenth = (v) => Math.round(v * 10) / 10;
 const round3 = (v) => Math.round(v * 1000) / 1000;
 
-function spokenWordCount(text) {
+function spokenWordCount(text, lang = 'en') {
+  if (lang === 'zh-HK') {
+    return (String(text).match(/[\p{L}\p{N}]/gu) || []).length;
+  }
   return String(text)
     .split(/\s+/)
     .filter((w) => w && /[\p{L}\p{N}]/u.test(w)).length;
@@ -53,13 +58,27 @@ function letterWeight(text) {
   );
 }
 
-function talkSeconds(text, factor) {
+function cjkWeight(text) {
+  return (
+    (String(text).match(/[\u3400-\u9FFF\uF900-\uFAFF]/gu) || []).length +
+    LETTERS_A_DIGIT * (String(text).match(/\p{N}/gu) || []).length +
+    (String(text).match(/[A-Za-z]/gu) || []).length
+  );
+}
+
+function talkSeconds(text, factor, lang = 'en') {
+  if (lang === 'zh-HK') {
+    return cjkWeight(text) / (CJK_CHARS_A_SECOND * factor);
+  }
   return letterWeight(text) / (LETTERS_A_SECOND * factor);
 }
 
 function voiceFactor(video) {
   const pace = video.pace || 1;
   const speed = video.speed || 1;
+  if (video.lang === 'zh-HK') {
+    return Math.max(0.5, speed * pace);
+  }
   // Kokoro default speed is 0.9; match explainroo's scaling.
   const normal = 0.9;
   return ((speed * pace) / normal) ** 0.65 * (VOICE_RATES[video.voice] ?? 1);
@@ -82,6 +101,7 @@ function sceneGaps(scene, video) {
 export function estimateLength({ script, video }) {
   const pace = video.pace || 1;
   const factor = voiceFactor(video);
+  const lang = video.lang || 'en';
   let words = 0;
   let speech = 0;
   let leads = 0;
@@ -93,10 +113,10 @@ export function estimateLength({ script, video }) {
   script.scenes.forEach((scene, index) => {
     const a = scene.attrs;
     const isLast = index === script.scenes.length - 1;
-    const count = spokenWordCount(scene.spoken);
+    const count = spokenWordCount(scene.spoken, lang);
     let dur;
     if (count) {
-      const talk = talkSeconds(scene.spoken, factor);
+      const talk = talkSeconds(scene.spoken, factor, lang);
       const { gaps } = sceneGaps(scene, video);
       const around = ((a.lead ?? video.lead) + (a.hold ?? video.hold)) / pace;
       dur = around + (isLast ? video.end / pace : 0) + talk + gaps;
@@ -122,6 +142,7 @@ export function estimateLength({ script, video }) {
     low: tenth(total - speech + speech / (1 + SPREAD)),
     high: tenth(total - speech + speech / (1 - SPREAD)),
     words,
+    unitLabel: lang === 'zh-HK' ? 'chars' : 'words',
     perMinute: Math.round((words / speech) * 60),
     speechSeconds: tenth(speech),
     perScene: Math.round((leads / narrated) * 100) / 100,
@@ -148,7 +169,8 @@ export function estimateLine(e) {
   const other = e.other
     ? ` Scenes with a min, or without narration, add ${e.other.toFixed(1)} s more.`
     : '';
-  let line = `about ${Math.round(e.seconds)} s${range}: ${e.words} words of speech at about ${e.perMinute} a minute take ${e.speechSeconds.toFixed(1)} s. ${scenes}${pauses}. The end of the video adds ${e.end.toFixed(1)} s.${other}`;
+  const unit = e.unitLabel || 'words';
+  let line = `about ${Math.round(e.seconds)} s${range}: ${e.words} ${unit} of speech at about ${e.perMinute} a minute take ${e.speechSeconds.toFixed(1)} s. ${scenes}${pauses}. The end of the video adds ${e.end.toFixed(1)} s.${other}`;
   if (e.targetSeconds) {
     const over = e.seconds - e.targetSeconds;
     if (over > 0.5) {
@@ -167,6 +189,8 @@ export function estimateLine(e) {
 export function buildEstimatedTimeline({ script, video, scenes: layouts }) {
   const pace = video.pace || 1;
   const factor = voiceFactor(video);
+  const lang = video.lang || 'en';
+  const weightFn = lang === 'zh-HK' ? cjkWeight : letterWeight;
   const fps = video.fps || 30;
   const snap = (t) => Math.round(t * fps) / fps;
 
@@ -181,9 +205,9 @@ export function buildEstimatedTimeline({ script, video, scenes: layouts }) {
     const hold = ((a.hold ?? video.hold) + (isLast ? video.end : 0)) / pace;
     const { chunks, gaps } = sceneGaps(scene, video);
 
-    const weights = chunks.map((c) => Math.max(1, letterWeight(c.text)));
+    const weights = chunks.map((c) => Math.max(1, weightFn(c.text)));
     const totalWeight = weights.reduce((s, w) => s + w, 0) || 1;
-    const talk = scene.spoken ? talkSeconds(scene.spoken, factor) : 0;
+    const talk = scene.spoken ? talkSeconds(scene.spoken, factor, lang) : 0;
 
     // Distribute talk time across sentence chunks by letter weight; place gaps between.
     const sentences = [];

@@ -5,7 +5,13 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, '..');
 export const TEMPLATES = path.join(ROOT, 'templates', 'starter');
+export const TEMPLATES_ZH_HK = path.join(ROOT, 'templates', 'starter-zh-HK');
 export const DOCS_DIR = path.join(ROOT, 'docs');
+export const SCRIPTS_DIR = path.join(ROOT, 'scripts');
+
+export function templateDirForLang(lang) {
+  return lang === 'zh-HK' ? TEMPLATES_ZH_HK : TEMPLATES;
+}
 
 export function packageVersion() {
   return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;

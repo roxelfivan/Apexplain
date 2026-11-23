@@ -1,0 +1,21 @@
+{
+  "intro": {
+    "layout": "title",
+    "title": "{{title}}",
+    "subtitle": "簡短解說"
+  },
+  "main": {
+    "layout": "steps",
+    "cue": "sentence",
+    "items": [
+      { "icon": "lightbulb", "text": "第一個重點" },
+      { "icon": "list", "text": "第二個重點" },
+      { "icon": "check", "text": "第三個重點" }
+    ]
+  },
+  "outro": {
+    "layout": "title",
+    "title": "就係咁",
+    "subtitle": "多謝收看"
+  }
+}

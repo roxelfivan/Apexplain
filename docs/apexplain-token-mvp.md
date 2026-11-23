@@ -154,9 +154,15 @@ docs/apexplain-token-mvp.md # this plan
 
 ---
 
+## Post–Phase 6 language add
+
+- `video.json` `"lang": "en" | "zh-HK"` (default `en`).
+- English: Kokoro (local `~/.cache/apexplain`). zh-HK: external Vocello CLI only (Voice Design + Cantonese brief; no npm/Python Vocello dep) + TC fonts.
+- Local web UI: `apexplain ui --port 3847`.
+
 ## Explicit non-goals until after Phase 6
 
-Whisper/word cues, agent still/sheet vision, Rough.js/MathJax/camera director, paid TTS/images/clips, publish/share, product-demo `record`, multi-language, motion blur, 54-voice catalog in the skill. Forking explainroo or matching its look frame-for-frame is also out of scope.
+Whisper/word cues, agent still/sheet vision, Rough.js/MathJax/camera director, paid TTS/images/clips, publish/share, product-demo `record`, Mandarin-as-Cantonese, motion blur, 54-voice catalog in the skill. Forking explainroo or matching its look frame-for-frame is also out of scope.
 
 ## Dependency map
 

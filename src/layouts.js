@@ -2,6 +2,7 @@
  * Five declarative layout renderers. Each pushes boxes onto `els` for QA.
  */
 import { drawIcon } from './icons.js';
+import { fontCss } from './fonts.js';
 import { drawLines, measureBlock } from './text.js';
 
 function box(els, kind, path, x, y, w, h, { fontSize = null, alpha = 1 } = {}) {
@@ -52,28 +53,30 @@ export function renderLayout(ctx, layout, {
   sceneId,
   sceneLocalT = Infinity,
   sceneTimeline = null,
+  lang = 'en',
   els = [],
 }) {
   const cues = cueTimesFor(layout, sceneTimeline);
+  const opts = { safe, theme, type, sceneId, sceneLocalT, cues, lang, els };
   switch (layout.layout) {
     case 'title':
-      return layoutTitle(ctx, layout, { safe, theme, type, sceneId, els });
+      return layoutTitle(ctx, layout, opts);
     case 'cards':
-      return layoutCards(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, els });
+      return layoutCards(ctx, layout, opts);
     case 'steps':
-      return layoutSteps(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, els });
+      return layoutSteps(ctx, layout, opts);
     case 'compare':
-      return layoutCompare(ctx, layout, { safe, theme, type, sceneId, els });
+      return layoutCompare(ctx, layout, opts);
     case 'flow':
-      return layoutFlow(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, els });
+      return layoutFlow(ctx, layout, opts);
     default:
       break;
   }
 }
 
-function layoutTitle(ctx, layout, { safe, theme, type, sceneId, els }) {
-  const titleFont = `700 ${type.title}px sans-serif`;
-  const subFont = `500 ${type.subtitle}px sans-serif`;
+function layoutTitle(ctx, layout, { safe, theme, type, sceneId, lang = 'en', els }) {
+  const titleFont = fontCss('700', type.title, lang);
+  const subFont = fontCss('500', type.subtitle, lang);
   const maxW = safe.w * 0.86;
   const title = measureBlock(ctx, layout.title, { font: titleFont, maxWidth: maxW });
   const sub = layout.subtitle
@@ -106,9 +109,9 @@ function layoutTitle(ctx, layout, { safe, theme, type, sceneId, els }) {
   }
 }
 
-function layoutSteps(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, els }) {
+function layoutSteps(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, lang = 'en', els }) {
   const items = layout.items || [];
-  const bodyFont = `500 ${type.body}px sans-serif`;
+  const bodyFont = fontCss('500', type.body, lang);
   const iconSize = type.body * 1.4;
   const rowGap = type.body * 0.85;
   const maxW = safe.w * 0.72;
@@ -147,12 +150,12 @@ function layoutSteps(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cue
   });
 }
 
-function layoutCards(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, els }) {
+function layoutCards(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, lang = 'en', els }) {
   const items = layout.items || [];
   const cols = Math.min(3, Math.max(1, items.length));
   const gap = type.body * 0.7;
   const cardW = (safe.w - gap * (cols - 1)) / cols;
-  const bodyFont = `500 ${type.body}px sans-serif`;
+  const bodyFont = fontCss('500', type.body, lang);
   const iconSize = type.body * 1.6;
   const pad = type.body * 0.7;
 
@@ -212,12 +215,12 @@ function layoutCards(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cue
   });
 }
 
-function layoutCompare(ctx, layout, { safe, theme, type, sceneId, els }) {
+function layoutCompare(ctx, layout, { safe, theme, type, sceneId, lang = 'en', els }) {
   const gap = type.body * 0.8;
   const colW = (safe.w - gap) / 2;
   const pad = type.body * 0.75;
-  const titleFont = `700 ${type.subtitle}px sans-serif`;
-  const bodyFont = `500 ${type.body}px sans-serif`;
+  const titleFont = fontCss('700', type.subtitle, lang);
+  const bodyFont = fontCss('500', type.body, lang);
 
   const drawSide = (side, key, x) => {
     const title = side.title
@@ -271,9 +274,9 @@ function layoutCompare(ctx, layout, { safe, theme, type, sceneId, els }) {
   drawSide(layout.right, 'right', safe.x + colW + gap);
 }
 
-function layoutFlow(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, els }) {
+function layoutFlow(ctx, layout, { safe, theme, type, sceneId, sceneLocalT, cues, lang = 'en', els }) {
   const items = layout.items || [];
-  const bodyFont = `500 ${type.body}px sans-serif`;
+  const bodyFont = fontCss('500', type.body, lang);
   const pad = type.body * 0.55;
   const gap = type.body * 0.55;
   const arrow = type.body * 0.9;

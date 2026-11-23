@@ -25,7 +25,7 @@ function logLine(msg) {
 /**
  * Validate + estimate. Writes build/timeline.json (estimated).
  */
-export function makeDryRun(dir, { estimateOnly = false } = {}) {
+export function makeDryRun(dir, { estimateOnly = false, log = logLine } = {}) {
   const { paths, video, script, scenes, notes } = loadProject(dir);
   const timeline = buildEstimatedTimeline({ script, video, scenes });
   const timelineFile = writeTimeline(paths, timeline);
@@ -34,45 +34,53 @@ export function makeDryRun(dir, { estimateOnly = false } = {}) {
 
   const sceneIds = script.scenes.map((s) => s.id);
   const lines = [];
+  const push = (line) => {
+    lines.push(line);
+    log(line);
+  };
 
   if (!estimateOnly) {
-    lines.push(
-      `dry-run ${displayPath(paths.root)}`,
+    push(`dry-run ${displayPath(paths.root)}`);
+    push(
       `parsed ${sceneIds.length} scene${sceneIds.length === 1 ? '' : 's'} from script.md` +
         (sceneIds.length ? ` (${sceneIds.join(', ')})` : ''),
+    );
+    push(
       `scenes.json: ${Object.keys(scenes).length} layout${Object.keys(scenes).length === 1 ? '' : 's'} validated`,
-      `title: ${video.title ?? '(none)'} · size: ${video.size} · theme: ${video.theme}`,
+    );
+    push(
+      `title: ${video.title ?? '(none)'} · lang: ${video.lang || 'en'} · size: ${video.size} · theme: ${video.theme}`,
     );
     for (const sc of script.scenes) {
       const layout = scenes[sc.id]?.layout;
       const marks = Object.keys(sc.marks);
       const sec = estimate?.sceneSeconds?.[sc.id];
-      lines.push(
+      push(
         `  ${sc.id}: layout=${layout}, sentences=${sc.sentenceCount}` +
           (sec != null ? `, ~${sec}s` : '') +
           (marks.length ? `, markers=${marks.join(',')}` : ''),
       );
     }
-    for (const note of notes) lines.push(`note: ${note}`);
+    for (const note of notes) push(`note: ${note}`);
   } else {
-    lines.push(`estimate ${displayPath(paths.root)}`);
+    push(`estimate ${displayPath(paths.root)}`);
   }
 
   if (estimate) {
-    lines.push(estimateLine(estimate));
+    push(estimateLine(estimate));
     const cueCount = timeline.cues.length;
-    lines.push(
+    push(
       `timeline: ${timeline.scenes.length} scenes, ${cueCount} cue${cueCount === 1 ? '' : 's'}, ~${timeline.duration}s → ${relTimeline}`,
     );
   } else {
-    lines.push('no narration to estimate');
+    push('no narration to estimate');
   }
 
   let layoutChecks = [];
   if (!estimateOnly) {
     layoutChecks = checkProjectLayouts({ paths, video, script, scenes, notes }, timeline);
-    lines.push(`layout: ok (${layoutChecks.length} scene${layoutChecks.length === 1 ? '' : 's'})`);
-    lines.push('ok: schema + layout valid');
+    push(`layout: ok (${layoutChecks.length} scene${layoutChecks.length === 1 ? '' : 's'})`);
+    push('ok: schema + layout valid');
   }
 
   return {
@@ -84,6 +92,7 @@ export function makeDryRun(dir, { estimateOnly = false } = {}) {
     layouts: Object.fromEntries(Object.entries(scenes).map(([id, s]) => [id, s.layout])),
     video: {
       title: video.title,
+      lang: video.lang || 'en',
       size: video.size,
       theme: video.theme,
     },
@@ -207,9 +216,13 @@ export async function makeFull(dir, { force = false, draft = false, log = logLin
 }
 
 export async function make(dir, opts = {}) {
-  if (opts.voiceOnly) return makeVoiceOnly(dir, { force: !!opts.force });
+  const log = opts.log || logLine;
+  if (opts.voiceOnly) return makeVoiceOnly(dir, { force: !!opts.force, log });
   if (opts.dryRun || opts.estimate) {
-    return makeDryRun(dir, { estimateOnly: !!opts.estimate && !opts.dryRun });
+    return makeDryRun(dir, {
+      estimateOnly: !!opts.estimate && !opts.dryRun,
+      log,
+    });
   }
-  return makeFull(dir, { force: !!opts.force, draft: !!opts.draft });
+  return makeFull(dir, { force: !!opts.force, draft: !!opts.draft, log });
 }

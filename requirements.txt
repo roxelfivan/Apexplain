@@ -1,0 +1,17 @@
+# Apexplain has no Python TTS dependencies.
+# Install Node packages with: npm install
+#
+# Local-first after setup — make/ui do not call the network.
+#
+# Models (downloaded once, then used offline):
+#   English  — npm run setup:kokoro      (~88 MB → ~/.cache/apexplain)
+#   zh-HK    — npm run setup:vocello     (~2.23 GB Vocello pro_design_speed
+#              → ~/Library/Application Support/QwenVoice/models/)
+#              Requires Vocello Mac CLI first:
+#              https://github.com/PowerBeef/Vocello/releases
+#
+# Optional network (off by default):
+#   APEXPLAIN_ALLOW_HF=1   — allow Hugging Face during Kokoro load
+#   APEXPLAIN_ALLOW_NET=1  — allow Wikipedia during Autogenerate
+#
+# See README.md → Requirements / Dependencies / Local-first / Installation.

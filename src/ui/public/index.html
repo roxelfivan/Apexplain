@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apexplain</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <header class="brand">
+          <h1>Apexplain</h1>
+          <p class="muted" id="version">…</p>
+        </header>
+
+        <section>
+          <h2>Projects</h2>
+          <ul id="projectList" class="project-list"></ul>
+        </section>
+
+        <section class="new-project">
+          <h2>New project</h2>
+          <label
+            >Title
+            <input id="newTitle" placeholder="e.g. Why leap years exist" />
+          </label>
+          <label
+            >Folder name
+            <input id="newName" placeholder="auto from title (a-z, 0-9, -)" />
+          </label>
+          <label
+            >Language
+            <select id="newLang">
+              <option value="en">English</option>
+              <option value="zh-HK">Chinese (繁體 / Vocello)</option>
+            </select>
+          </label>
+          <label
+            >Size
+            <select id="newSize">
+              <option value="16:9">16:9</option>
+              <option value="9:16">9:16</option>
+            </select>
+          </label>
+          <p id="createHint" class="hint">Tip: folder name cannot have spaces. Leave blank to auto-fill.</p>
+          <button id="createBtn" type="button" class="primary">Create</button>
+          <p id="createError" class="err banner hidden"></p>
+        </section>
+      </aside>
+
+      <main class="main">
+        <div id="empty" class="empty">
+          <div>
+            <p>Create a project on the left, then edit <code>video.json</code>, <code>script.md</code>, and <code>scenes.json</code> here.</p>
+            <p class="muted">After Create, the editor opens automatically.</p>
+          </div>
+        </div>
+
+        <div id="editor" class="editor hidden">
+          <header class="toolbar">
+            <div>
+              <h2 id="projectTitle">Project</h2>
+              <p class="muted" id="projectMeta"></p>
+            </div>
+            <div class="actions">
+              <button id="generateBtn" type="button" class="secondary" title="Fill script + scenes from the title">
+                Autogenerate
+              </button>
+              <button id="saveBtn" type="button">Save</button>
+              <button id="dryBtn" type="button" class="secondary">Dry-run</button>
+              <button id="makeBtn" type="button" class="primary">Make video</button>
+            </div>
+          </header>
+
+          <p class="hint">
+            Edit the tabs below, click <strong>Save</strong>, then <strong>Make video</strong>.
+            <strong>Autogenerate</strong> rewrites script + scenes from the title in <code>video.json</code>.
+          </p>
+
+          <div class="tabs" role="tablist">
+            <button type="button" class="tab active" data-tab="video">video.json</button>
+            <button type="button" class="tab" data-tab="script">script.md</button>
+            <button type="button" class="tab" data-tab="scenes">scenes.json</button>
+          </div>
+
+          <div class="panes">
+            <label class="pane tab-panel active" data-panel="video">
+              <span>Settings (title, lang, size, voice…)</span>
+              <textarea id="videoEditor" spellcheck="false"></textarea>
+            </label>
+            <label class="pane tab-panel" data-panel="script">
+              <span>Narration — use ## scene-id blocks</span>
+              <textarea id="scriptEditor" spellcheck="false"></textarea>
+            </label>
+            <label class="pane tab-panel" data-panel="scenes">
+              <span>On-screen layouts — keys must match script scene ids</span>
+              <textarea id="scenesEditor" spellcheck="false"></textarea>
+            </label>
+          </div>
+
+          <section class="output" id="output">
+            <div class="output-head">
+              <h3>Output</h3>
+              <span id="outputStatus" class="output-status muted">idle</span>
+            </div>
+            <pre id="log" class="log"></pre>
+            <video id="player" controls playsinline></video>
+          </section>
+        </div>
+      </main>
+    </div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

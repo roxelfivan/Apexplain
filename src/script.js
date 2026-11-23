@@ -119,6 +119,8 @@ export function tokenizeNarration(text, line = 0) {
       text[j] !== '{'
     ) {
       j++;
+      // Break after CJK / ASCII sentence punctuation so "句。句！" becomes two words.
+      if (/[.!?…。！？｡]/.test(text[j - 1])) break;
     }
     pushWord(text.slice(i, j), text.slice(i, j));
     i = j;
@@ -134,7 +136,7 @@ export function speechChunks(
   units,
   { sentenceGap = 0.3, paragraphGap = 0.55, pace = 1, splitOnMarks = false } = {},
 ) {
-  const sentenceEnd = /[.!?…।]["'’)\]]*$/;
+  const sentenceEnd = /[.!?…。！？｡]["'’"」』)\]]*$/u;
   const chunks = [];
   let cur = null;
   let gapBefore = 0;
@@ -166,6 +168,16 @@ export function speechChunks(
       return;
     }
     if (u.type !== 'word') return;
+    // Orphan punctuation after an English "?" before "。" (e.g. "cat?。") must not
+    // become its own TTS chunk — Cantonese TTS rejects empty/punct-only fragments.
+    const onlyPunct = !/[\p{L}\p{N}]/u.test(u.spoken);
+    if (onlyPunct && !cur && chunks.length) {
+      const prev = chunks[chunks.length - 1];
+      prev.text = joinSpoken(prev.text, u.spoken);
+      prev.words.push({ unitIndex: index, display: u.display, spoken: u.spoken });
+      return;
+    }
+    if (onlyPunct && !cur) return;
     if (!cur) {
       cur = {
         gapBefore,
@@ -177,7 +189,7 @@ export function speechChunks(
       };
       gapBefore = 0;
     }
-    cur.text += (cur.words.length ? ' ' : '') + u.spoken;
+    cur.text = joinSpoken(cur.text, u.spoken);
     cur.words.push({ unitIndex: index, display: u.display, spoken: u.spoken });
     if (sentenceEnd.test(u.spoken)) {
       close({ endedSentence: true });
@@ -188,12 +200,26 @@ export function speechChunks(
   return chunks;
 }
 
+const CJK_TAIL = /[\u3400-\u9FFF\uF900-\uFAFF\u3040-\u30FF]$/u;
+const CJK_HEAD = /^[\u3400-\u9FFF\uF900-\uFAFF\u3040-\u30FF]/u;
+
+/** Join spoken tokens without inserting spaces between CJK runs. */
+export function joinSpoken(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  if (CJK_TAIL.test(a) && CJK_HEAD.test(b)) return a + b;
+  if (/[。！？｡、，：；]$/u.test(a)) return a + b;
+  // Attach trailing CJK/ASCII punctuation tightly ("cat?" + "。" → "cat?。").
+  if (/^[。！？｡、，：；.!?,;:…]+/u.test(b)) return a + b;
+  return `${a} ${b}`;
+}
+
 /**
  * Sentence boundaries only (ignores [#markers] for counting).
  * Marks map to the sentence index they precede (0-based).
  */
 export function markerMap(units) {
-  const sentenceEnd = /[.!?…।]["'’)\]]*$/;
+  const sentenceEnd = /[.!?…。！？｡]["'’"」』)\]]*$/u;
   const marks = {};
   let sentenceIndex = 0;
   let inSentence = false;

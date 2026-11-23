@@ -10,6 +10,9 @@ import { crossCheck, validateScenes } from './scenes.js';
 
 const SIZES = new Set(['16:9', '9:16']);
 const THEMES = new Set(['studio', 'dark']);
+const LANGS = new Set(['en', 'zh-HK']);
+
+export { LANGS };
 
 function readJson(file, label) {
   let raw;
@@ -56,11 +59,21 @@ function validateVideo(video) {
       rule: 'enum',
     });
   }
+  if (video.lang != null && !LANGS.has(video.lang)) {
+    throw new ApexError(`lang must be en or zh-HK, not "${video.lang}"`, {
+      code: 'bad_video',
+      path: 'video.json/lang',
+      rule: 'enum',
+    });
+  }
+  const lang = video.lang || 'en';
+  const defaultVoice = lang === 'zh-HK' ? 'vocello' : 'af_heart';
   return {
     title: typeof video.title === 'string' ? video.title : null,
+    lang,
     size: video.size || '16:9',
     theme: video.theme || 'studio',
-    voice: video.voice || 'af_heart',
+    voice: video.voice || defaultVoice,
     fps: Number.isFinite(video.fps) ? video.fps : 30,
     lead: Number.isFinite(video.lead) ? video.lead : 0.4,
     hold: Number.isFinite(video.hold) ? video.hold : 0.6,

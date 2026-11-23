@@ -16,13 +16,15 @@ const TOPICS = {
 Apexplain turns \`script.md\` + \`scenes.json\` into a narrated MP4.
 
 1. Read \`skills/apexplain/SKILL.md\` (or \`apexplain docs overview\`).
-2. \`apexplain init videos/<name> --title "..."\`
-3. Edit \`script.md\` (45–90s, short sentences) and \`scenes.json\` (5 layouts).
+2. \`apexplain init videos/<name> --title "..." --lang en|zh-HK\`
+3. Edit \`script.md\` (45–90s) and \`scenes.json\` (5 layouts).
 4. \`apexplain make videos/<name> --dry-run\` then \`apexplain make videos/<name>\`.
+5. Or open the UI: \`apexplain ui --port 3847\`.
+
+\`lang=en\` → local Kokoro. \`lang=zh-HK\` → local Vocello CLI (Voice Design + Cantonese brief; \`npm run setup:vocello\`).
+Runtime is local-first (no HF / Wikipedia unless \`APEXPLAIN_ALLOW_HF=1\` / \`APEXPLAIN_ALLOW_NET=1\`).
 
 Layouts: \`title\`, \`cards\`, \`steps\`, \`compare\`, \`flow\`. Output: \`out/video.mp4\`.
-
-Read \`apexplain docs plan\` for the phased MVP plan.
 `,
   },
 };

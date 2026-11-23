@@ -93,3 +93,21 @@ export function concatAudio(pieces) {
   }
   return out;
 }
+
+/** Linear resample mono float samples to a new rate. */
+export function resampleMono(samples, fromRate, toRate) {
+  if (fromRate === toRate) return samples;
+  if (!fromRate || !toRate) throw new Error('resampleMono: bad sample rate');
+  const ratio = fromRate / toRate;
+  const outLen = Math.max(1, Math.floor(samples.length / ratio));
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const src = i * ratio;
+    const j = Math.floor(src);
+    const f = src - j;
+    const a = samples[j] || 0;
+    const b = samples[Math.min(j + 1, samples.length - 1)] || 0;
+    out[i] = a + (b - a) * f;
+  }
+  return out;
+}

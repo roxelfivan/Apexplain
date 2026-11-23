@@ -1,4 +1,6 @@
 /** Hard-burn captions (9:16) and SRT export. */
+import { fontCss } from './fonts.js';
+import { wrapText } from './text.js';
 
 export function captionAt(scene, localT) {
   const sentences = scene?.sentences || [];
@@ -17,26 +19,15 @@ export function captionAt(scene, localT) {
   return cur.text;
 }
 
-export function drawCaption(ctx, text, { width, height, theme }) {
+export function drawCaption(ctx, text, { width, height, theme, lang = 'en' }) {
   if (!text) return;
   const maxW = width * 0.82;
   const fontSize = Math.round(Math.min(width, height) * 0.035);
   ctx.save();
-  ctx.font = `700 ${fontSize}px sans-serif`;
+  ctx.font = fontCss(700, fontSize, lang);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  const words = String(text).split(/\s+/);
-  const lines = [];
-  let line = '';
-  for (const w of words) {
-    const trial = line ? `${line} ${w}` : w;
-    if (ctx.measureText(trial).width <= maxW) line = trial;
-    else {
-      if (line) lines.push(line);
-      line = w;
-    }
-  }
-  if (line) lines.push(line);
+  const lines = wrapText(ctx, text, maxW);
 
   const lineH = fontSize * 1.25;
   const blockH = lines.length * lineH + fontSize * 0.5;

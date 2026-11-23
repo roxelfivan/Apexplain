@@ -1,19 +1,61 @@
-/** Simple canvas text helpers: wrap + measure. */
+/** Simple canvas text helpers: wrap + measure (CJK-aware). */
 
+const CJK = /[\u3400-\u9FFF\uF900-\uFAFF]/u;
+
+function isBreakOpportunity(ch) {
+  return /\s/.test(ch) || CJK.test(ch) || /[，。！？、：；「」『』（）()]/.test(ch);
+}
+
+/**
+ * Wrap text for Latin (space) or CJK (character) scripts.
+ */
 export function wrapText(ctx, text, maxWidth) {
-  const words = String(text).split(/\s+/).filter(Boolean);
-  if (!words.length) return [];
+  const raw = String(text ?? '');
+  if (!raw) return [];
+  if (!CJK.test(raw) && !/\S/.test(raw.replace(/\s+/g, ' '))) return [];
+
+  // Prefer space wrapping when the string has whitespace and little CJK.
+  const cjkCount = (raw.match(CJK) || []).length;
+  if (cjkCount === 0) {
+    const words = raw.split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const lines = [];
+    let line = words[0];
+    for (let i = 1; i < words.length; i++) {
+      const trial = `${line} ${words[i]}`;
+      if (ctx.measureText(trial).width <= maxWidth) line = trial;
+      else {
+        lines.push(line);
+        line = words[i];
+      }
+    }
+    lines.push(line);
+    return lines;
+  }
+
   const lines = [];
-  let line = words[0];
-  for (let i = 1; i < words.length; i++) {
-    const trial = `${line} ${words[i]}`;
-    if (ctx.measureText(trial).width <= maxWidth) line = trial;
-    else {
+  let line = '';
+  for (const ch of raw) {
+    if (ch === '\n') {
+      if (line) lines.push(line);
+      line = '';
+      continue;
+    }
+    const trial = line + ch;
+    if (ctx.measureText(trial).width <= maxWidth) {
+      line = trial;
+      continue;
+    }
+    if (line) {
       lines.push(line);
-      line = words[i];
+      line = /\s/.test(ch) ? '' : ch;
+    } else {
+      // Single glyph wider than max — still emit it.
+      lines.push(ch);
+      line = '';
     }
   }
-  lines.push(line);
+  if (line) lines.push(line);
   return lines;
 }
 
@@ -44,3 +86,5 @@ export function drawLines(ctx, lines, x, y, { font, color, align = 'left', lineH
   ctx.restore();
   return lines.length * size * lineHeight;
 }
+
+void isBreakOpportunity;

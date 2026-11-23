@@ -122,7 +122,12 @@ export async function renderVideo(project, timeline, { draft = false, log = () =
         type,
       });
       if (burnCaptions) {
-        drawCaption(ctx, captionAt(sc, localT), { width, height, theme });
+        drawCaption(ctx, captionAt(sc, localT), {
+          width,
+          height,
+          theme,
+          lang: project.video.lang || 'en',
+        });
       }
       await enc.write(canvas.toBuffer('image/jpeg', draft ? 70 : 85));
       if (f > 0 && f % Math.max(1, Math.floor(fps * 3)) === 0) {

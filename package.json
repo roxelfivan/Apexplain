@@ -1,6 +1,6 @@
 {
   "name": "apexplain",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Agent-run explainer videos with a tiny skill and declarative scenes.",
   "type": "module",
   "bin": {
@@ -9,13 +9,16 @@
   "files": [
     "bin/",
     "src/",
+    "scripts/",
     "templates/",
     "skills/",
     "examples/",
     "docs/",
     "AGENTS.md",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md",
+    "requirements.txt"
   ],
   "engines": {
     "node": ">=20.11"
@@ -27,13 +30,17 @@
   },
   "scripts": {
     "apexplain": "node bin/apexplain.js",
-    "test": "node --test test/*.test.js"
+    "ui": "node bin/apexplain.js ui --port 3847",
+    "test": "node --test test/*.test.js",
+    "setup:vocello": "bash scripts/setup_vocello.sh",
+    "setup:kokoro": "node scripts/setup_kokoro.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
     "@napi-rs/canvas": "^1.2.0",
     "ffmpeg-static": "^5.2.0",
     "kokoro-js": "^1.2.1",
-    "lucide-static": "^0.469.0"
+    "lucide-static": "^0.469.0",
+    "opencc-js": "^1.4.2"
   }
 }

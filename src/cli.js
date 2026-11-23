@@ -9,19 +9,22 @@ import { previewProject } from './preview.js';
 const HELP = `apexplain ${packageVersion()} — agent-run explainer videos
 
 Usage:
-  apexplain init <dir> [--title TEXT] [--size 16:9|9:16] [--theme studio|dark]
+  apexplain init <dir> [--title TEXT] [--lang en|zh-HK] [--size 16:9|9:16] [--theme studio|dark]
   apexplain make <dir> [--draft] [--force] [--json]
   apexplain make <dir> --dry-run [--json]
   apexplain make <dir> --estimate [--json]
   apexplain make <dir> --voice-only [--force] [--json]
   apexplain preview <dir> [--json]
-  apexplain doctor [--json]
+  apexplain ui [--port 3847]
+  apexplain doctor [--lang en|zh-HK] [--json]
   apexplain docs [id] [--json]
   apexplain help
   apexplain version
 
-Full make: validate → Kokoro voice (cached) → layout-check → render → MP4.
-APEXPLAIN_TTS=mock skips the model download (tests).
+Full make: validate → voice (cached) → layout-check → render → MP4.
+Runtime is local-first (no Hugging Face / Wikipedia unless opted in).
+lang=en uses local Kokoro. lang=zh-HK uses local Vocello CLI (npm run setup:vocello).
+APEXPLAIN_TTS=mock skips models (tests). APEXPLAIN_ALLOW_HF=1 / APEXPLAIN_ALLOW_NET=1 opt into network.
 See: apexplain docs plan
 `;
 
@@ -37,8 +40,10 @@ function parseArgs(argv) {
     else if (a === '--force') flags.force = true;
     else if (a === '--draft') flags.draft = true;
     else if (a === '--title') flags.title = argv[++i];
+    else if (a === '--lang') flags.lang = argv[++i];
     else if (a === '--size') flags.size = argv[++i];
     else if (a === '--theme') flags.theme = argv[++i];
+    else if (a === '--port') flags.port = argv[++i];
     else if (a === '--help' || a === '-h') flags.help = true;
     else if (a === '--version' || a === '-V') flags.version = true;
     else if (a.startsWith('-')) {
@@ -82,10 +87,18 @@ export async function run(argv) {
       if (!dir) throw new ApexError('usage: apexplain init <dir>', { code: 'usage', rule: 'args' });
       const result = initProject(dir, {
         title: flags.title,
+        lang: flags.lang,
         size: flags.size,
         theme: flags.theme,
       });
       report(json ? result : result.message, { json });
+      return;
+    }
+
+    if (cmd === 'ui') {
+      const { startUi } = await import('./ui/server.js');
+      const port = flags.port ? Number(flags.port) : 3847;
+      await startUi({ port });
       return;
     }
 
@@ -109,7 +122,7 @@ export async function run(argv) {
     }
 
     if (cmd === 'doctor') {
-      const result = doctor();
+      const result = doctor({ lang: flags.lang });
       report(json ? result : result.message, { json, exitCode: result.ok ? 0 : 1 });
       return;
     }
