@@ -1,0 +1,11 @@
+{
+  "title": "{{title}}",
+  "size": "{{size}}",
+  "theme": "{{theme}}",
+  "voice": "af_heart",
+  "fps": 30,
+  "lead": 0.4,
+  "hold": 0.6,
+  "end": 1.0,
+  "captions": "auto"
+}

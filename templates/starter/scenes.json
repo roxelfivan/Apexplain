@@ -1,0 +1,21 @@
+{
+  "intro": {
+    "layout": "title",
+    "title": "{{title}}",
+    "subtitle": "A short explainer"
+  },
+  "main": {
+    "layout": "steps",
+    "cue": "sentence",
+    "items": [
+      { "icon": "lightbulb", "text": "First idea" },
+      { "icon": "list", "text": "Second idea" },
+      { "icon": "check", "text": "Third idea" }
+    ]
+  },
+  "outro": {
+    "layout": "title",
+    "title": "That's the idea",
+    "subtitle": "Thanks for watching"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "hook": {
+    "layout": "title",
+    "title": "Why leap years exist",
+    "subtitle": "Calendars vs Earth's orbit"
+  },
+  "orbit": {
+    "layout": "steps",
+    "cue": "sentence",
+    "items": [
+      { "icon": "globe", "text": "365.2422 days per orbit", "marker": "orbit" },
+      { "icon": "calendar", "text": "Whole days on the calendar", "marker": "fraction" }
+    ]
+  },
+  "drift": {
+    "layout": "steps",
+    "cue": "sentence",
+    "items": [
+      { "text": "365 days on the calendar" },
+      { "text": "Drift of ~0.24 day per year" },
+      { "text": "The gap keeps growing" }
+    ]
+  },
+  "leap": {
+    "layout": "cards",
+    "cue": "sentence",
+    "items": [
+      { "icon": "calendar", "text": "Extra day every 4 years" },
+      { "icon": "clock", "text": "February 29" }
+    ]
+  },
+  "correction": {
+    "layout": "compare",
+    "left": { "title": "Too much", "text": "Four-year rule overshoots" },
+    "right": { "title": "Fix", "text": "Skip some century leaps" }
+  },
+  "rule": {
+    "layout": "flow",
+    "cue": "sentence",
+    "items": [
+      { "text": "Gregorian rule (1582)" },
+      { "text": "Skip century leap days" },
+      { "text": "Keep if divisible by 400" }
+    ]
+  },
+  "examples": {
+    "layout": "compare",
+    "left": { "title": "1900", "text": "Not a leap year" },
+    "right": { "title": "2000", "text": "Kept its leap day" }
+  },
+  "close": {
+    "layout": "title",
+    "title": "Stay in season",
+    "subtitle": "Leap days keep the calendar honest"
+  }
+}

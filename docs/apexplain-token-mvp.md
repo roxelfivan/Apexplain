@@ -6,12 +6,12 @@ This document is the product and implementation plan. Work is sequenced in six p
 
 ## Implementation phases
 
-- [ ] **Phase 1** — CLI scaffold: init, docs, make --dry-run, doctor
-- [ ] **Phase 2** — script.md parser + scenes.json schema + compact path/rule errors
-- [ ] **Phase 3** — letter-rate duration estimate + synthetic sentence/marker timeline
-- [ ] **Phase 4** — Kokoro TTS, per-scene cache, measured chunk timeline
-- [ ] **Phase 5** — five-layout canvas engine + geometric layout check
-- [ ] **Phase 6** — ffmpeg mux, SKILL.md, leap-years example, golden tests
+- [x] **Phase 1** — CLI scaffold: init, docs, make --dry-run, doctor
+- [x] **Phase 2** — script.md parser + scenes.json schema + compact path/rule errors
+- [x] **Phase 3** — letter-rate duration estimate + synthetic sentence/marker timeline
+- [x] **Phase 4** — Kokoro TTS, per-scene cache, measured chunk timeline
+- [x] **Phase 5** — five-layout canvas engine + geometric layout check
+- [x] **Phase 6** — ffmpeg mux, SKILL.md, leap-years example, golden tests
 
 ## Product target
 
@@ -82,10 +82,10 @@ Example `scenes.json`:
 
 ```
 package.json, bin/apexplain.js, src/cli.js
-skills/apexplain/SKILL.md   # filled in Phase 6
+skills/apexplain/SKILL.md   # ~2KB agent skill
 AGENTS.md                   # one-line pointer
 templates/starter/          # video.json, script.md, scenes.json
-examples/leap-years/        # filled in Phase 6
+examples/leap-years/        # golden example (scenes.json)
 docs/apexplain-token-mvp.md # this plan
 ```
 

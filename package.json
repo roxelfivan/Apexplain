@@ -1,0 +1,39 @@
+{
+  "name": "apexplain",
+  "version": "0.0.1",
+  "description": "Agent-run explainer videos with a tiny skill and declarative scenes.",
+  "type": "module",
+  "bin": {
+    "apexplain": "bin/apexplain.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "templates/",
+    "skills/",
+    "examples/",
+    "docs/",
+    "AGENTS.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roxelfivan/Apexplain.git"
+  },
+  "scripts": {
+    "apexplain": "node bin/apexplain.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@napi-rs/canvas": "^1.2.0",
+    "ffmpeg-static": "^5.2.0",
+    "kokoro-js": "^1.2.1",
+    "lucide-static": "^0.469.0"
+  }
+}
