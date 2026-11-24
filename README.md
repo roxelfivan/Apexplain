@@ -12,7 +12,7 @@ Plan: [docs/apexplain-token-mvp.md](docs/apexplain-token-mvp.md) · Agent skill:
 |------|--------|
 | **Node.js** | `>= 20.11` |
 | **macOS Apple Silicon** | Required for zh-HK (Vocello). English-only works on any platform Node supports. |
-| **Disk (models)** | English: ~88 MB. zh-HK: ~2.2 GB once (see below). |
+| **Disk (models)** | **Not in git.** English: ~88 MB on demand. zh-HK: ~2.2 GB on demand (see below). |
 | **Traditional Chinese font** | For zh-HK on-screen text (PingFang HK / Songti TC / Noto Sans TC), or set `APEXPLAIN_FONT=/path/to/font.otf` |
 
 No Python / pip TTS stack. FFmpeg ships via `ffmpeg-static` (npm).
@@ -27,12 +27,16 @@ npm install
 
 Runtime packages: `kokoro-js`, `@huggingface/transformers`, `@napi-rs/canvas`, `ffmpeg-static`, `lucide-static`, `opencc-js` (Simplified → Traditional HK for zh-HK content).
 
-### TTS models (downloaded separately)
+### TTS models (on demand — not in this GitHub repo)
+
+Clone / `npm install` does **not** download full TTS weights. English and zh-HK are independent: install either, both, or neither.
 
 | Lang | Engine | What to install | Approx. size | Where it lands |
 |------|--------|-----------------|--------------|----------------|
-| **en** | [Kokoro-82M](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) (`q8`) | `npm run setup:kokoro` | **~88 MB** | `~/.cache/apexplain/models/…/model_quantized.onnx` |
-| **zh-HK** | [Vocello](https://github.com/PowerBeef/Vocello) CLI → Qwen3-TTS Voice Design | Vocello `.pkg` + `npm run setup:vocello` | **~2.23 GB** model (`pro_design_speed`); CLI binary ~62 MB | `~/Library/Application Support/QwenVoice/models/…` |
+| **en** | [Kokoro-82M](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) (`q8`) | `npm run setup:kokoro` **or UI Settings → Download from Hugging Face** | **~88 MB** | `~/.cache/apexplain/models/…/model_quantized.onnx` |
+| **zh-HK** | [Vocello](https://github.com/PowerBeef/Vocello) CLI → Qwen3-TTS Voice Design | Vocello `.pkg` + `npm run setup:vocello` **or UI Settings → Download Vocello model** | **~2.23 GB** model (`pro_design_speed`); CLI binary ~62 MB | `~/Library/Application Support/QwenVoice/models/…` |
+
+Save/load local copies from **Settings** (gear) so you can skip Hugging Face / Vocello on another machine. See [docs/settings.md](docs/settings.md).
 
 Vocello is an **external Mac CLI** (not an npm or pip package). Apexplain only shells out to `vocello generate` (MVP: Voice Design + Cantonese brief). Local Vocello has no Rocky/Kiki Cantonese speakers.
 
@@ -44,9 +48,9 @@ After setup, **make / UI / preview / voice** use only on-disk assets — no Hugg
 |------|----------|
 | `make`, `preview`, `ui` Make video | **No** — Kokoro from `~/.cache/apexplain`, Vocello from local MLX models, ffmpeg/canvas/fonts from disk |
 | Autogenerate | **Local Gemma** (after `npm run setup:gemma` / Settings download) or **MiniMax** HTTPS if you pasted a key. `APEXPLAIN_LLM=mock` forces stubs |
-| `npm run setup:kokoro` | **Once** — downloads ~88 MB into the local cache |
+| `npm run setup:kokoro` or Settings → Download from Hugging Face | **Once** — downloads ~88 MB Kokoro into the local cache |
 | `npm run setup:gemma` | **Once** — downloads Gemma 2 2B Instruct ONNX (~2 GB) for Autogenerate |
-| `npm run setup:vocello` | **Once** — Vocello downloads ~2.23 GB Voice Design weights |
+| `npm run setup:vocello` or Settings → Download Vocello model | **Once** — Vocello downloads ~2.23 GB Voice Design weights |
 
 Env knobs:
 
@@ -110,10 +114,11 @@ node bin/apexplain.js ui --port 3847
 
 Projects live under `videos/` (override with `APEXPLAIN_VIDEOS`).
 
-**Settings** (gear) picks the Autogenerate backend, same idea as [apeditor](https://github.com/roxelfivan/apeditor):
+**Settings** (gear) — same idea as [apeditor](https://github.com/roxelfivan/apeditor). Full reference: [docs/settings.md](docs/settings.md).
 
-- **Local Model (require around 2gb disk space)** — Gemma 2 2B Instruct ONNX on this machine (`npm run setup:gemma` or Download in Settings). No API key.
+- **Local Model (require around 2gb disk space)** — Gemma 2 2B Instruct ONNX for Autogenerate (`npm run setup:gemma` or Download in Settings). No API key.
 - **Minimax** — paste your API key (stored in `~/.config/apexplain/llm.json`, mode 0600). Default endpoint `https://api.minimax.io/v1`, model `MiniMax-M2.7`.
+- **TTS** — download Kokoro and/or Vocello on demand, Save to Disk, or Load from a previously saved folder. Project `video.json` is title/lang/size/voice only.
 
 ### Chinese project
 

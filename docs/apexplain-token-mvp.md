@@ -124,7 +124,7 @@ docs/apexplain-token-mvp.md # this plan
 
 **Goal:** Real narration WAVs; cues locked to measured chunk durations.
 
-- Lazy-load Kokoro (`onnx-community/Kokoro-82M-v1.0-ONNX`); cache under `~/.cache/apexplain/`.
+- Lazy-load Kokoro (`onnx-community/Kokoro-82M-v1.0-ONNX`); cache under `~/.cache/apexplain/`. Weights are **not** in git — `setup:kokoro` or UI Settings download on demand.
 - Split speech into chunks at sentence ends and `#marker` boundaries; synthesize per chunk; concatenate with pause silence; write `build/voice/<scene>.wav` + `.json` (hash of spoken text + voice + speed).
 - Rebuild timeline from **measured** chunk durations (exact sentence/`#marker` times). Still no frames.
 - CLI: `make <dir> --voice-only` stops after voice when render is not yet needed.

@@ -34,7 +34,7 @@
         <p class="muted" id="version">…</p>
       </div>
       <p class="muted llm-chip" id="llmStatus">LLM: …</p>
-      <button id="settingsBtn" type="button" class="icon-btn" title="Settings (LLM)" aria-label="Settings">
+      <button id="settingsBtn" type="button" class="icon-btn" title="Settings (LLM and TTS models)" aria-label="Settings">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
           <path
             fill="none"
@@ -138,7 +138,7 @@
 
           <div class="tabs" role="tablist" aria-label="Project files">
             <button type="button" class="tab active" role="tab" id="tab-video" data-tab="video" aria-controls="panel-video" aria-selected="true">
-              video.json
+              Project
             </button>
             <button type="button" class="tab" role="tab" id="tab-script" data-tab="script" aria-controls="panel-script" aria-selected="false" tabindex="-1">
               script.md
@@ -150,7 +150,7 @@
 
           <div class="panes">
             <div class="pane tab-panel active" role="tabpanel" id="panel-video" data-panel="video" aria-labelledby="tab-video">
-              <label for="videoEditor">Settings (title, lang, size, voice…)</label>
+              <label for="videoEditor">Project (title, lang, size, voice…)</label>
               <textarea id="videoEditor" spellcheck="false" autocomplete="off"></textarea>
             </div>
             <div class="pane tab-panel" role="tabpanel" id="panel-script" data-panel="script" aria-labelledby="tab-script" hidden>
@@ -185,6 +185,7 @@
           </button>
         </div>
         <div class="modal-body">
+          <p class="hint">Autogenerate LLM and TTS weights are not in git. Download only what you need.</p>
           <label for="llmProvider"
             >Provider
             <select id="llmProvider"></select>
@@ -230,6 +231,75 @@
             </div>
             <pre id="gemmaLog" class="log gemma-log hidden"></pre>
           </div>
+
+          <h3 class="settings-section">TTS models</h3>
+          <section class="model-card" data-engine="kokoro">
+            <h3>English — Kokoro-82M</h3>
+            <p class="muted">
+              No API key — runs on this machine. Model <code>onnx-community/Kokoro-82M-v1.0-ONNX</code>
+              (<span data-size="kokoro">~88 MB</span>). Cached under <code data-cache-root>~/.cache/apexplain</code>
+              after download; never uploaded. Use Save to Disk for an offline copy.
+            </p>
+            <p>Status: <strong data-status="kokoro">checking…</strong></p>
+            <p class="muted">Last saved: <span data-lastsave="kokoro">Not saved to disk yet.</span></p>
+            <p class="muted" data-path="kokoro"></p>
+            <div class="progress hidden" data-progress="kokoro">
+              <div class="progress-bar"><span></span></div>
+              <pre class="job-log" data-log="kokoro"></pre>
+            </div>
+            <p class="err hidden" data-error="kokoro"></p>
+            <div class="model-actions">
+              <button type="button" class="primary" data-act="kokoro-download">Download from Hugging Face</button>
+              <button type="button" class="secondary" data-act="kokoro-export">Save to Disk</button>
+              <button type="button" class="secondary" data-act="kokoro-import">Load from disk…</button>
+              <button type="button" class="secondary" data-act="kokoro-clear">Clear cached model</button>
+              <a class="btn-link" href="https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX" target="_blank" rel="noopener noreferrer">Open on Hugging Face</a>
+            </div>
+            <label class="path-field hidden" data-pathfield="kokoro-export">
+              Save copy to folder
+              <input data-input="kokoro-export" placeholder="/absolute/path/to/kokoro-copy" />
+              <button type="button" class="primary" data-act="kokoro-export-go">Save</button>
+            </label>
+            <label class="path-field hidden" data-pathfield="kokoro-import">
+              Load from folder (tokenizer.json + onnx/*.onnx)
+              <input data-input="kokoro-import" placeholder="/absolute/path/to/saved/kokoro" />
+              <button type="button" class="primary" data-act="kokoro-import-go">Load</button>
+            </label>
+          </section>
+
+          <section class="model-card" data-engine="vocello">
+            <h3>zh-HK — Vocello (pro_design_speed)</h3>
+            <p class="muted">
+              External Mac CLI (Apple Silicon). Model <code>pro_design_speed</code>
+              (<span data-size="vocello">~2.23 GB</span>). Install either or both engines independently.
+              Weights live under QwenVoice, not in this GitHub repo.
+            </p>
+            <p>Status: <strong data-status="vocello">checking…</strong></p>
+            <p class="muted">Last saved: <span data-lastsave="vocello">Not saved to disk yet.</span></p>
+            <p class="muted" data-path="vocello"></p>
+            <div class="progress hidden" data-progress="vocello">
+              <div class="progress-bar"><span></span></div>
+              <pre class="job-log" data-log="vocello"></pre>
+            </div>
+            <p class="err hidden" data-error="vocello"></p>
+            <div class="model-actions">
+              <button type="button" class="primary" data-act="vocello-download">Download Vocello model</button>
+              <button type="button" class="secondary" data-act="vocello-export">Save to Disk</button>
+              <button type="button" class="secondary" data-act="vocello-import">Load from disk…</button>
+              <button type="button" class="secondary" data-act="vocello-clear">Clear cached model</button>
+              <a class="btn-link" href="https://github.com/PowerBeef/Vocello/releases" target="_blank" rel="noopener noreferrer">Vocello releases</a>
+            </div>
+            <label class="path-field hidden" data-pathfield="vocello-export">
+              Save copy to folder
+              <input data-input="vocello-export" placeholder="/absolute/path/to/vocello-copy" />
+              <button type="button" class="primary" data-act="vocello-export-go">Save</button>
+            </label>
+            <label class="path-field hidden" data-pathfield="vocello-import">
+              Load from folder (saved pro_design_speed copy)
+              <input data-input="vocello-import" placeholder="/absolute/path/to/saved/pro_design_speed" />
+              <button type="button" class="primary" data-act="vocello-import-go">Load</button>
+            </label>
+          </section>
         </div>
         <div class="modal-foot">
           <button id="settingsCancel" type="button">Cancel</button>
