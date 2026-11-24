@@ -29,11 +29,13 @@ In a checkout: `node bin/apexplain.js …`.
   - Needs: Apple Silicon, Vocello CLI + `pro_design_speed` (~2.23 GB), TC font or `APEXPLAIN_FONT`
   - English Kokoro weights: ~88 MB via `npm run setup:kokoro` or UI **Settings** (not stored in git)
   - Weights are on-demand: install Kokoro, Vocello, both, or neither
+  - Settings **Narration voice**: Kokoro voice/speed (en); Vocello brief/seed/delivery/language (zh-HK) — fixed seed keeps one speaker across chunks
   - Settings can Save to Disk / Load from a local copy — see `docs/settings.md`
 
 ## Files
 
 - `video.json` — title, lang, size `16:9|9:16`, theme `studio|dark`
+- `storyboard.md` — optional beats / shot list; Autogenerate uses it as the outline base when non-empty
 - `script.md` — `## scene-id`, `[#marker]`, `[pause]`, `{shown|spoken}`
 - `scenes.json` — one layout per scene id
 

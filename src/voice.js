@@ -9,10 +9,11 @@ import { ApexError } from './errors.js';
 import { joinSpoken, speechChunks } from './script.js';
 import { estimateLength, estimateLine } from './timeline.js';
 import { loadSpeechEngine } from './tts/index.js';
+import { loadTtsSettings, ttsCacheFingerprint } from './tts/config.js';
 import { concatAudio, trimSilence, writeWav, readWav } from './wav.js';
 import { TTS_MODEL, TTS_SAMPLE_RATE, ttsDtype } from './models.js';
 
-const PIPELINE = 2;
+const PIPELINE = 3;
 const round = (v) => Math.round(v * 1000) / 1000;
 
 export function voicePaths(project, id) {
@@ -35,17 +36,28 @@ export function sceneVoiceChunks(scene, video) {
 }
 
 export function speechHash(scene, chunks, video, engineMeta = {}) {
+  const ttsFp = engineMeta.ttsFingerprint || ttsCacheFingerprint(loadTtsSettings());
+  const lang = video.lang || 'en';
+  const effectiveVoice =
+    lang === 'zh-HK'
+      ? video.voice || 'vocello'
+      : video.voice || ttsFp.kokoroVoice || 'af_heart';
+  const effectiveSpeed =
+    lang === 'zh-HK'
+      ? (video.speed || 1) * (video.pace || 1)
+      : (video.speed || ttsFp.kokoroSpeed || 1) * (video.pace || 1);
   return crypto
     .createHash('sha256')
     .update(
       JSON.stringify({
         PIPELINE,
-        lang: video.lang || 'en',
-        engine: engineMeta.engine || (video.lang === 'zh-HK' ? 'vocello' : 'kokoro'),
+        lang,
+        engine: engineMeta.engine || (lang === 'zh-HK' ? 'vocello' : 'kokoro'),
         model: engineMeta.model || null,
         dtype: process.env.APEXPLAIN_TTS === 'mock' ? 'mock' : engineMeta.dtype || null,
-        voice: video.voice,
-        speed: (video.speed || 1) * (video.pace || 1),
+        voice: effectiveVoice,
+        speed: effectiveSpeed,
+        tts: ttsFp,
         chunks: chunks.map((c) => [c.gapBefore, c.text, c.marks || []]),
       }),
     )
@@ -81,13 +93,51 @@ async function renderScene({ scene, chunks, hash, video, tts, paths, log }) {
   }
 
   const sr = TTS_SAMPLE_RATE;
-  const speed = (video.speed || 1) * (video.pace || 1);
+  const ttsCfg = tts?.ttsSettings || loadTtsSettings();
+  const lang = video.lang || 'en';
+  const speed =
+    lang === 'zh-HK'
+      ? (video.speed || 1) * (video.pace || 1)
+      : (video.speed || ttsCfg.kokoro.speed || 1) * (video.pace || 1);
+  const voice =
+    lang === 'zh-HK' ? video.voice || 'vocello' : video.voice || ttsCfg.kokoro.voice || 'af_heart';
   const pieces = [];
   let cursor = 0;
   const chunkInfo = [];
   const marks = {};
   /** @type {Map<number, { index: number, start: number, end: number, texts: string[] }>} */
   const sentenceAcc = new Map();
+
+  // Speakable chunk indices (punctuation-only skipped).
+  const speakIdx = [];
+  for (let ci = 0; ci < chunks.length; ci++) {
+    if (/[\p{L}\p{N}]/u.test(chunks[ci].text)) speakIdx.push(ci);
+  }
+
+  /** @type {Map<number, { audio: Float32Array, sampling_rate: number }>} */
+  const audioByCi = new Map();
+  if (speakIdx.length && tts) {
+    const texts = speakIdx.map((i) => chunks[i].text);
+    if (lang === 'zh-HK' && speakIdx.length > 1 && typeof tts.generateMany === 'function') {
+      log(`voice ${scene.id}: generating ${speakIdx.length} chunks (shared Vocello seed)…`);
+      await new Promise((r) => setImmediate(r));
+      const audios = await tts.generateMany(texts, { voice, speed });
+      for (let j = 0; j < speakIdx.length; j++) {
+        audioByCi.set(speakIdx[j], audios[j]);
+        log(`voice ${scene.id}: chunk ${speakIdx[j] + 1}/${chunks.length} done`);
+        await new Promise((r) => setImmediate(r));
+      }
+    } else {
+      for (const ci of speakIdx) {
+        log(`voice ${scene.id}: chunk ${ci + 1}/${chunks.length}`);
+        await new Promise((r) => setImmediate(r));
+        const audio = await tts.generate(chunks[ci].text, { voice, speed });
+        audioByCi.set(ci, audio);
+        log(`voice ${scene.id}: chunk ${ci + 1}/${chunks.length} done`);
+        await new Promise((r) => setImmediate(r));
+      }
+    }
+  }
 
   for (let ci = 0; ci < chunks.length; ci++) {
     const chunk = chunks[ci];
@@ -97,23 +147,14 @@ async function renderScene({ scene, chunks, hash, video, tts, paths, log }) {
       cursor += Math.round(gap * sr);
     }
 
-    // Punctuation-only fragments (e.g. lone "。") are not speakable — skip TTS.
-    if (!/[\p{L}\p{N}]/u.test(chunk.text)) {
-      continue;
-    }
-    // Same progress shape for EN (Kokoro) and zh-HK (Vocello): one Output line
-    // as each chunk finishes. Yield after the start line so SSE can flush before
-    // a long Vocello take (async spawn — not spawnSync).
-    log(`voice ${scene.id}: chunk ${ci + 1}/${chunks.length}`);
-    await new Promise((r) => setImmediate(r));
-    const audio = await tts.generate(chunk.text, { voice: video.voice, speed });
+    const audio = audioByCi.get(ci);
+    if (!audio) continue;
+
     const samples = trimSilence(audio.audio, audio.sampling_rate || sr);
     const start = cursor / sr;
     const dur = samples.length / sr;
     pieces.push(samples);
     cursor += samples.length;
-    log(`voice ${scene.id}: chunk ${ci + 1}/${chunks.length} done (${round(dur)}s)`);
-    await new Promise((r) => setImmediate(r));
 
     for (const name of chunk.marks || []) {
       marks[name] = round(start);
@@ -172,6 +213,7 @@ export async function synthesize(project, { force = false, log = () => {} } = {}
   const estimate = estimateLength(project);
   if (estimate) log(`voice: ${estimateLine(estimate)}`);
 
+  const ttsCfg = loadTtsSettings();
   const engineMeta = {
     engine: video.lang === 'zh-HK' ? 'vocello' : 'kokoro',
     model: video.lang === 'zh-HK' ? 'vocello' : TTS_MODEL,
@@ -181,6 +223,7 @@ export async function synthesize(project, { force = false, log = () => {} } = {}
         : video.lang === 'zh-HK'
           ? 'mlx'
           : ttsDtype(),
+    ttsFingerprint: ttsCacheFingerprint(ttsCfg),
   };
 
   const result = {};
@@ -202,7 +245,7 @@ export async function synthesize(project, { force = false, log = () => {} } = {}
   if (!todo.length) return result;
 
   const needsSpeech = todo.some((t) => t.chunks.length);
-  const tts = needsSpeech ? await loadSpeechEngine(video, { log }) : null;
+  const tts = needsSpeech ? await loadSpeechEngine(video, { log, settings: ttsCfg }) : null;
 
   try {
     for (const { scene, chunks, hash } of todo) {

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.5 — 2026-11-24
+
+### Added
+- Settings **Narration voice**: Kokoro voice/speed (en) and Vocello Voice Design brief/seed/delivery/language (zh-HK) in `~/.config/apexplain/tts.json`
+- Optional **storyboard.md** project tab — Autogenerate uses it as the outline base when non-empty
+- Starter templates ship `storyboard.md` (en + zh-HK)
+
+### Changed
+- zh-HK Vocello uses a fixed design **seed** (and shared warm-engine batch) so chunks keep one voice; default brief locks Cantonese
+- Autogenerate JSON parsing strips model reasoning tags and picks the best `{ script, scenes }` object from noisy replies
+- Docs / skill / README cover Narration voice env overrides and storyboard-driven Autogenerate
+
+### Fixed
+- Vocello Voice Design no longer re-rolls a different speaker per chunk when seed/brief stay constant
+
 ## 0.0.4 — 2026-11-24
 
 ### Added

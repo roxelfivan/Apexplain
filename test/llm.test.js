@@ -3,7 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { generateExplainer } from '../src/generate.js';
+import {
+  buildExplainerMessages,
+  generateExplainer,
+  outlineFromStoryboard,
+  storyboardIsActive,
+} from '../src/generate.js';
 import {
   loadLlmSettings,
   normalizeLlmSettings,
@@ -11,7 +16,7 @@ import {
   saveLlmSettings,
 } from '../src/llm/config.js';
 import { llmReady } from '../src/llm/complete.js';
-import { parseLlmExplainer } from '../src/llm/parse.js';
+import { normalizeLlmScenes, parseLlmExplainer } from '../src/llm/parse.js';
 
 const prevConfig = process.env.APEXPLAIN_CONFIG;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'apexplain-llm-'));
@@ -89,6 +94,106 @@ describe('parse LLM explainer JSON', () => {
 
   it('rejects missing script', () => {
     assert.throws(() => parseLlmExplainer('{"scenes":{}}'), /missing string "script"/);
+  });
+
+  it('strips MiniMax <think> reasoning that contains brace noise like {spoken}', () => {
+    const payload = {
+      script: `# Cat\n\n## open\n[#hook] Hello cat. [#angle] More cat.\n\n## close {hold=1}\n[#close] Bye. [#thanks] Thanks.\n`,
+      scenes: {
+        open: { layout: 'title', title: 'Cat', subtitle: 'Hello' },
+        close: { layout: 'title', title: 'Bye', subtitle: 'Thanks' },
+      },
+    };
+    const text =
+      `<think>\nOptional {spoken} and [pause]. Return { "script": "…" } only.\n</think>\n` +
+      JSON.stringify(payload);
+    const parsed = parseLlmExplainer(text);
+    assert.match(parsed.script, /Hello cat/);
+    assert.equal(parsed.scenes.open.layout, 'title');
+  });
+
+  it('coerces narration-text cue values to "sentence"', () => {
+    const payload = {
+      script: `# Cat\n\n## open\n[#hook] Hello. [#angle] More.\n\n## traits\n[#point] One. [#fact] Two. [#more] Three.\n\n## close {hold=1}\n[#close] Bye. [#thanks] Thanks.\n`,
+      scenes: {
+        open: { layout: 'title', title: 'Cat', subtitle: 'Hello', cue: 'ignore me' },
+        traits: {
+          layout: 'cards',
+          cue: 'A cat is a small mammal.',
+          items: [
+            { icon: 'heart', text: 'One' },
+            { icon: 'zap', text: 'Two' },
+            { icon: 'star', text: 'Three' },
+          ],
+        },
+        close: { layout: 'title', title: 'Bye', subtitle: 'Thanks' },
+      },
+    };
+    const parsed = parseLlmExplainer(JSON.stringify(payload));
+    assert.equal(parsed.scenes.traits.cue, 'sentence');
+    assert.equal(parsed.scenes.open.cue, undefined);
+  });
+});
+
+describe('normalizeLlmScenes', () => {
+  it('defaults item layouts to cue sentence and strips cue on title', () => {
+    const n = normalizeLlmScenes({
+      open: { layout: 'title', title: 'T', cue: 'nope' },
+      mid: { layout: 'steps', items: [{ text: 'a' }] },
+    });
+    assert.equal(n.open.cue, undefined);
+    assert.equal(n.mid.cue, 'sentence');
+  });
+});
+
+describe('storyboard outline', () => {
+  it('ignores empty / comment-only template storyboards', () => {
+    assert.equal(
+      storyboardIsActive('# Storyboard (optional)\n\n<!-- note -->\n'),
+      false,
+    );
+  });
+
+  it('builds outline from ## beats and injects storyboard into messages', () => {
+    const board = `## open — Hook\nSay what a cat is\n\n## traits\nWhiskers and claws\n\n## close\nThanks\n`;
+    assert.equal(storyboardIsActive(board), true);
+    const outline = outlineFromStoryboard(board, { intent: 'definition', subject: 'cat', lang: 'en' });
+    assert.equal(outline[0].id, 'open');
+    assert.equal(outline[0].role, 'open');
+    assert.equal(outline[1].id, 'traits');
+    assert.equal(outline[2].role, 'close');
+    const msgs = buildExplainerMessages({
+      topic: 'What is a cat?',
+      subject: 'cat',
+      intent: 'definition',
+      outline,
+      lang: 'en',
+      storyboard: board,
+    });
+    assert.match(msgs[1].content, /storyboard/);
+    assert.match(msgs[1].content, /Whiskers and claws/);
+  });
+
+  it('passes storyboard into generateExplainer complete()', async () => {
+    let saw = '';
+    const complete = async (messages) => {
+      saw = JSON.stringify(messages);
+      return JSON.stringify({
+        script: `# Cat\n\n## open\nHello.\n\n## close {hold=1}\nBye.\n`,
+        scenes: {
+          open: { layout: 'title', title: 'Cat', subtitle: 'Hi' },
+          close: { layout: 'title', title: 'Bye', subtitle: 'Thanks' },
+        },
+      });
+    };
+    const g = await generateExplainer({
+      title: 'What is a cat?',
+      storyboard: '## open\nHook\n\n## close\nOutro\n',
+      complete,
+    });
+    assert.equal(g.storyboard, true);
+    assert.match(saw, /storyboard/);
+    assert.match(saw, /Use the storyboard as the base/);
   });
 });
 

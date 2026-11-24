@@ -87,7 +87,7 @@ npm run setup:vocello   # runs: vocello models install pro_design_speed
 node bin/apexplain.js doctor --lang zh-HK
 ```
 
-Optional env: `APEXPLAIN_VOCELLO=/path/to/vocello`, `APEXPLAIN_VOCELLO_BRIEF=…`.
+Optional env: `APEXPLAIN_VOCELLO=/path/to/vocello`, `APEXPLAIN_VOCELLO_BRIEF=…`, `APEXPLAIN_VOCELLO_SEED=…`, `APEXPLAIN_VOCELLO_DELIVERY=…`, `APEXPLAIN_VOCELLO_LANGUAGE=chinese`. Voice Design brief/seed/delivery are also editable in **Settings → Narration voice** (`~/.config/apexplain/tts.json`).
 
 ### 4. Verify
 

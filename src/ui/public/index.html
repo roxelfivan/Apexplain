@@ -133,12 +133,15 @@
           <p class="hint">
             Edit the tabs below, click <strong>Save</strong>, then <strong>Make video</strong>.
             <strong>Autogenerate</strong> uses the LLM in <strong>Settings</strong> (local Gemma or MiniMax) to rewrite
-            script + scenes from the title in <code>video.json</code>.
+            script + scenes from the title — and from <code>storyboard.md</code> when that tab is non-empty.
           </p>
 
           <div class="tabs" role="tablist" aria-label="Project files">
             <button type="button" class="tab active" role="tab" id="tab-video" data-tab="video" aria-controls="panel-video" aria-selected="true">
               Project
+            </button>
+            <button type="button" class="tab" role="tab" id="tab-storyboard" data-tab="storyboard" aria-controls="panel-storyboard" aria-selected="false" tabindex="-1">
+              storyboard.md
             </button>
             <button type="button" class="tab" role="tab" id="tab-script" data-tab="script" aria-controls="panel-script" aria-selected="false" tabindex="-1">
               script.md
@@ -152,6 +155,12 @@
             <div class="pane tab-panel active" role="tabpanel" id="panel-video" data-panel="video" aria-labelledby="tab-video">
               <label for="videoEditor">Project (title, lang, size, voice…)</label>
               <textarea id="videoEditor" spellcheck="false" autocomplete="off"></textarea>
+            </div>
+            <div class="pane tab-panel" role="tabpanel" id="panel-storyboard" data-panel="storyboard" aria-labelledby="tab-storyboard" hidden>
+              <label for="storyboardEditor"
+                >Optional storyboard — beats / shot list. Autogenerate uses this as the outline base when non-empty.</label
+              >
+              <textarea id="storyboardEditor" spellcheck="true" autocomplete="off"></textarea>
             </div>
             <div class="pane tab-panel" role="tabpanel" id="panel-script" data-panel="script" aria-labelledby="tab-script" hidden>
               <label for="scriptEditor">Narration — use ## scene-id blocks</label>
@@ -231,6 +240,41 @@
             </div>
             <pre id="gemmaLog" class="log gemma-log hidden"></pre>
           </div>
+
+          <h3 class="settings-section">Narration voice</h3>
+          <p class="hint">
+            English uses Kokoro (fixed speaker id). zh-HK uses Vocello Voice Design — keep a fixed
+            <strong>seed</strong> and a Cantonese-only brief so every chunk sounds like the same person.
+            Stored in <code>~/.config/apexplain/tts.json</code>.
+          </p>
+          <label for="kokoroVoice"
+            >English — Kokoro voice
+            <select id="kokoroVoice"></select>
+          </label>
+          <label for="kokoroSpeed"
+            >English — speed
+            <input id="kokoroSpeed" type="number" min="0.5" max="2" step="0.05" />
+          </label>
+          <label for="vocelloBrief"
+            >zh-HK — Voice Design brief
+            <textarea id="vocelloBrief" rows="3" spellcheck="true"></textarea>
+          </label>
+          <label for="vocelloSeed"
+            >zh-HK — seed (fixed for consistent voice)
+            <input id="vocelloSeed" type="number" min="0" step="1" />
+          </label>
+          <label for="vocelloLanguage"
+            >zh-HK — language
+            <select id="vocelloLanguage">
+              <option value="chinese">chinese</option>
+              <option value="auto">auto</option>
+              <option value="english">english</option>
+            </select>
+          </label>
+          <label for="vocelloDelivery"
+            >zh-HK — delivery (optional)
+            <textarea id="vocelloDelivery" rows="2" spellcheck="true" placeholder="e.g. Speak 粵語 only, clear explainer pacing"></textarea>
+          </label>
 
           <h3 class="settings-section">TTS models</h3>
           <section class="model-card" data-engine="kokoro">

@@ -66,10 +66,15 @@ describe('UI /api/models', () => {
     assert.equal(r.body.ok, true);
     assert.ok(r.body.kokoro);
     assert.ok(r.body.vocello);
+    // Isolated cache: status must not materialize Kokoro weights.
     assert.equal(r.body.kokoro.ok, false);
+    assert.equal(r.body.kokoro.bytes, 0);
     assert.match(r.body.kokoro.hfPage, /huggingface\.co/);
     assert.match(r.body.vocello.releasesPage, /Vocello\/releases/);
-    assert.equal(r.body.vocello.ok, false);
+    // Vocello CLI may already be installed on the host; GET still must not
+    // write weights into the isolated APEXPLAIN_VOCELLO_MODELS root.
+    assert.equal(r.body.vocello.modelsRoot, process.env.APEXPLAIN_VOCELLO_MODELS);
+    assert.equal(r.body.vocello.bytes, 0);
   });
 
   it('imports a local Kokoro folder via POST', async () => {

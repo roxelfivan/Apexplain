@@ -12,6 +12,7 @@ import { initProject } from '../init.js';
 import { llmReady } from '../llm/complete.js';
 import { LLM_PROVIDERS, publicLlmSettings, saveLlmSettings } from '../llm/config.js';
 import { loadGemma, probeGemma } from '../llm/gemma.js';
+import { publicTtsSettings, saveTtsSettings } from '../tts/config.js';
 import { make } from '../make.js';
 import {
   clearKokoro,
@@ -216,6 +217,7 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, {
         ok: true,
         ...publicLlmSettings(),
+        tts: publicTtsSettings(),
         providers: LLM_PROVIDERS.map((p) => ({
           id: p.id,
           label: p.label,
@@ -240,9 +242,14 @@ async function handleApi(req, res, url) {
         apiKey: body.apiKey,
         clearApiKey: !!body.clearApiKey,
       });
+      let tts = publicTtsSettings();
+      if (body.tts && typeof body.tts === 'object') {
+        tts = publicTtsSettings(saveTtsSettings(body.tts));
+      }
       return sendJson(res, 200, {
         ok: true,
         ...publicLlmSettings(saved),
+        tts,
         ready: llmReady(saved),
         gemma: probeGemma(),
       });
@@ -330,10 +337,23 @@ async function handleApi(req, res, url) {
       video.title = title;
       video.lang = lang;
       if (lang === 'zh-HK') video.voice = video.voice || 'vocello';
+      let storyboard =
+        body.storyboard != null
+          ? String(body.storyboard)
+          : fs.existsSync(paths.storyboard)
+            ? fs.readFileSync(paths.storyboard, 'utf8')
+            : '';
+      if (body.storyboard != null) {
+        fs.writeFileSync(
+          paths.storyboard,
+          storyboard.endsWith('\n') ? storyboard : storyboard + '\n',
+        );
+      }
       const logs = [];
       const { script, scenes, source, subject, outline, intent } = await generateExplainer({
         title,
         lang,
+        storyboard,
         log: (line) => logs.push(String(line)),
       });
       const videoText = JSON.stringify(video, null, 2) + '\n';
@@ -347,6 +367,7 @@ async function handleApi(req, res, url) {
         video: videoText,
         script,
         scenes: scenesText,
+        storyboard: fs.existsSync(paths.storyboard) ? fs.readFileSync(paths.storyboard, 'utf8') : '',
         source: source || null,
         subject: subject || null,
         intent: intent || null,
@@ -364,6 +385,7 @@ async function handleApi(req, res, url) {
         ok: true,
         name: path.basename(dir),
         video: fs.readFileSync(paths.video, 'utf8'),
+        storyboard: fs.existsSync(paths.storyboard) ? fs.readFileSync(paths.storyboard, 'utf8') : '',
         script: fs.readFileSync(paths.script, 'utf8'),
         scenes: fs.readFileSync(paths.scenes, 'utf8'),
         hasVideo: fs.existsSync(paths.outVideo),
@@ -377,6 +399,12 @@ async function handleApi(req, res, url) {
       if (body.video != null) {
         JSON.parse(body.video);
         fs.writeFileSync(paths.video, body.video.endsWith('\n') ? body.video : body.video + '\n');
+      }
+      if (body.storyboard != null) {
+        fs.writeFileSync(
+          paths.storyboard,
+          body.storyboard.endsWith('\n') ? body.storyboard : body.storyboard + '\n',
+        );
       }
       if (body.script != null) {
         fs.writeFileSync(paths.script, body.script.endsWith('\n') ? body.script : body.script + '\n');

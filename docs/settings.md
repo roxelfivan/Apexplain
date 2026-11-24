@@ -2,7 +2,7 @@
 
 Apexplain does **not** ship full-size TTS or LLM weights in git. A clone is tiny. Weights and API keys are fetched or stored **only when you ask**.
 
-Open **Settings** (gear in the top bar, or `Ctrl+.`). Project fields (`title`, `lang`, `size`, `voice`) stay in the **Project** tab (`video.json`).
+Open **Settings** (gear in the top bar, or `Ctrl+.`). Project fields (`title`, `lang`, `size`, `voice`) stay in the **Project** tab (`video.json`). Optional **storyboard.md** feeds Autogenerate when non-empty.
 
 ## Autogenerate LLM
 
@@ -14,6 +14,20 @@ Same provider choice as [apeditor](https://github.com/roxelfivan/apeditor):
 | **Minimax** | Chat Completions HTTPS | API key in `~/.config/apexplain/llm.json` (mode 0600) |
 
 `APEXPLAIN_LLM=mock` keeps stub Autogenerate for tests. Save in Settings stores the provider (and MiniMax key if you pasted one).
+
+## Narration voice
+
+Stored in `~/.config/apexplain/tts.json` (mode 0600). Save in Settings writes both LLM and TTS prefs.
+
+| Field | Engine | Purpose |
+|-------|--------|---------|
+| **Kokoro voice** + **speed** | English | Fixed speaker id across chunks (`af_heart`, …). Project `video.json` `voice` still overrides when set. |
+| **Voice Design brief** | zh-HK Vocello | Describe one speaker; lock gender and require 粵語 (not Mandarin). |
+| **seed** | zh-HK Vocello | Fixed integer reused on every chunk / batch so Voice Design does not re-roll gender. |
+| **language** | zh-HK Vocello | Usually `chinese` (Vocello has no separate Cantonese code — Cantonese comes from the brief). |
+| **delivery** | zh-HK Vocello | Optional delivery instruction (e.g. “Speak 粵語 only”). |
+
+Changing seed/brief invalidates voice cache on the next Make.
 
 ## TTS engines (on demand)
 
@@ -51,4 +65,10 @@ Load/save use **absolute paths on this machine** (localhost Node UI). The browse
 | `APEXPLAIN_MINIMAX_API_KEY` | Override the MiniMax key in `llm.json` |
 | `APEXPLAIN_VOCELLO` | Path to the Vocello binary |
 | `APEXPLAIN_VOCELLO_MODELS` | Override Vocello models directory |
+| `APEXPLAIN_VOCELLO_BRIEF` | Override Voice Design brief |
+| `APEXPLAIN_VOCELLO_SEED` | Override Vocello design seed |
+| `APEXPLAIN_VOCELLO_DELIVERY` | Override Vocello delivery instruction |
+| `APEXPLAIN_VOCELLO_LANGUAGE` | Override Vocello language (`chinese` / `auto` / `english`) |
+| `APEXPLAIN_KOKORO_VOICE` | Override default Kokoro voice id |
+| `APEXPLAIN_KOKORO_SPEED` | Override default Kokoro speed |
 | `APEXPLAIN_TTS=mock` | Skip real TTS weights (tests) |

@@ -22,6 +22,7 @@ export function projectPaths(dir) {
   return {
     root,
     video: path.join(root, 'video.json'),
+    storyboard: path.join(root, 'storyboard.md'),
     script: path.join(root, 'script.md'),
     scenes: path.join(root, 'scenes.json'),
     build: path.join(root, 'build'),

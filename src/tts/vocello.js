@@ -13,13 +13,30 @@ import path from 'node:path';
 import { ApexError } from '../errors.js';
 import { TTS_SAMPLE_RATE } from '../models.js';
 import { readWav, resampleMono } from '../wav.js';
+import { DEFAULT_VOCELLO_BRIEF, loadTtsSettings } from './config.js';
 
 export const VOCELLO_ENGINE = 'vocello';
 export const VOCELLO_VOICE = 'vocello';
 export const VOCELLO_DESIGN_MODEL = 'pro_design_speed';
 
-const DEFAULT_BRIEF =
-  'A clear Hong Kong Cantonese narrator, warm and natural, speaking fluent 粵語';
+const DEFAULT_BRIEF = DEFAULT_VOCELLO_BRIEF;
+
+function resolveVocelloDesign(opts = {}) {
+  const cfg = opts.settings || loadTtsSettings();
+  const v = cfg.vocello || {};
+  return {
+    brief: String(v.voiceBrief || DEFAULT_BRIEF).trim() || DEFAULT_BRIEF,
+    language: String(v.language || 'chinese').trim() || 'chinese',
+    seed: Number.isFinite(Number(v.seed)) ? Math.trunc(Number(v.seed)) : 42,
+    delivery: typeof v.delivery === 'string' ? v.delivery.trim() : '',
+  };
+}
+
+function wavFromFile(tmp) {
+  const wav = readWav(tmp);
+  const mono = resampleMono(wav.samples, wav.sampleRate, TTS_SAMPLE_RATE);
+  return { audio: mono, sampling_rate: TTS_SAMPLE_RATE };
+}
 
 function whichVocello() {
   const forced = process.env.APEXPLAIN_VOCELLO || process.env.VOCELLO_BIN;
@@ -276,7 +293,56 @@ export async function uninstallVocelloDesignModel({ log = () => {} } = {}) {
   return probeVocello();
 }
 
-export function createVocelloWorker({ log = () => {} } = {}) {
+function designArgv({ text, out, brief, language, seed, delivery }) {
+  const args = [
+    'generate',
+    '--mode',
+    'design',
+    '--text',
+    String(text),
+    '--language',
+    language,
+    '--voice-brief',
+    brief,
+    '--seed',
+    String(seed),
+    '--out',
+    out,
+    '--json',
+    '--no-input',
+    // Keep each Apexplain chunk as one take (matches EN per-chunk progress).
+    '--long-form',
+    'never',
+    '--wait-for-engine',
+  ];
+  if (delivery) {
+    args.push('--delivery', delivery);
+  }
+  return args;
+}
+
+function failSynthesize(bin, r, tmp) {
+  const env = parseJsonEnvelope(r.stdout);
+  const msg =
+    env?.error?.message ||
+    env?.message ||
+    r.stderr?.trim() ||
+    r.stdout?.trim() ||
+    `vocello exit ${r.status}`;
+  if (tmp && !fs.existsSync(tmp)) {
+    /* include missing out in message context */
+  }
+  throw new ApexError(`Vocello synthesize failed: ${String(msg).slice(0, 400)}`, {
+    code: 'vocello_tts',
+    rule: 'synthesize',
+    hint: `Check: ${bin} models list && ${bin} models install ${VOCELLO_DESIGN_MODEL}`,
+  });
+}
+
+/**
+ * @param {{ log?: Function, settings?: object }} [opts]
+ */
+export function createVocelloWorker({ log = () => {}, settings } = {}) {
   if (process.env.APEXPLAIN_TTS === 'mock') {
     return createMockVocello();
   }
@@ -291,88 +357,139 @@ export function createVocelloWorker({ log = () => {} } = {}) {
   }
 
   const bin = probe.bin;
-  const brief = process.env.APEXPLAIN_VOCELLO_BRIEF || DEFAULT_BRIEF;
-  const language = process.env.APEXPLAIN_VOCELLO_LANGUAGE || 'chinese';
+  const design = resolveVocelloDesign({ settings });
+  const { brief, language, seed, delivery } = design;
 
-  log(`loading Vocello (design, ${language})…`);
+  log(`loading Vocello (design, ${language}, seed=${seed})…`);
+
+  async function generateOne(text) {
+    const tmp = path.join(
+      os.tmpdir(),
+      `apexplain-vocello-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`,
+    );
+    const r = await runVocelloAsync(
+      bin,
+      designArgv({ text, out: tmp, brief, language, seed, delivery }),
+      600000,
+    );
+    if (r.status !== 0 || !fs.existsSync(tmp)) {
+      failSynthesize(bin, r, tmp);
+    }
+    try {
+      return wavFromFile(tmp);
+    } finally {
+      try {
+        fs.rmSync(tmp, { force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /**
+   * Multi-chunk on one warm engine via `vocello run --requests` (shared seed/brief/language).
+   * Falls back to sequential generateOne on failure.
+   */
+  async function generateMany(texts) {
+    const list = (texts || []).map((t) => String(t));
+    if (!list.length) return [];
+    if (list.length === 1) return [await generateOne(list[0])];
+
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apexplain-vocello-batch-'));
+    const reqPath = path.join(workDir, 'requests.jsonl');
+    const outs = list.map((_, i) => path.join(workDir, `chunk-${i}.wav`));
+    const lines = list.map((text, i) => {
+      const req = {
+        mode: 'design',
+        text,
+        language,
+        voiceBrief: brief,
+        seed,
+        out: outs[i],
+        longForm: 'never',
+      };
+      if (delivery) req.delivery = delivery;
+      return JSON.stringify(req);
+    });
+    fs.writeFileSync(reqPath, lines.join('\n') + '\n');
+
+    try {
+      log(`vocello run: ${list.length} chunks (seed=${seed})…`);
+      const r = await runVocelloAsync(
+        bin,
+        ['run', '--requests', reqPath, '--json', '--no-input', '--wait-for-engine'],
+        600000 * Math.min(list.length, 8),
+      );
+      const env = parseJsonEnvelope(r.stdout);
+      const results = env?.result?.results || env?.results;
+      const allOk =
+        r.status === 0 &&
+        Array.isArray(results) &&
+        results.length === list.length &&
+        results.every((row) => row?.ok !== false) &&
+        outs.every((p) => fs.existsSync(p));
+
+      if (!allOk) {
+        log('vocello run batch incomplete — falling back to per-chunk generate');
+        const out = [];
+        for (const text of list) {
+          out.push(await generateOne(text));
+        }
+        return out;
+      }
+
+      return outs.map((p) => wavFromFile(p));
+    } finally {
+      try {
+        fs.rmSync(workDir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   return {
     engine: VOCELLO_ENGINE,
+    design,
     async generate(text) {
-      const tmp = path.join(
-        os.tmpdir(),
-        `apexplain-vocello-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`,
-      );
-      const r = await runVocelloAsync(
-        bin,
-        [
-          'generate',
-          '--mode',
-          'design',
-          '--text',
-          String(text),
-          '--language',
-          language,
-          '--voice-brief',
-          brief,
-          '--out',
-          tmp,
-          '--json',
-          '--no-input',
-          // Keep each Apexplain chunk as one take (matches EN per-chunk progress).
-          '--long-form',
-          'never',
-          '--wait-for-engine',
-        ],
-        600000,
-      );
-      if (r.status !== 0 || !fs.existsSync(tmp)) {
-        const env = parseJsonEnvelope(r.stdout);
-        const msg =
-          env?.error?.message ||
-          env?.message ||
-          r.stderr?.trim() ||
-          r.stdout?.trim() ||
-          `vocello exit ${r.status}`;
-        throw new ApexError(`Vocello synthesize failed: ${String(msg).slice(0, 400)}`, {
-          code: 'vocello_tts',
-          rule: 'synthesize',
-          hint: `Check: ${bin} models list && ${bin} models install ${VOCELLO_DESIGN_MODEL}`,
-        });
-      }
-
-      try {
-        const wav = readWav(tmp);
-        const mono = resampleMono(wav.samples, wav.sampleRate, TTS_SAMPLE_RATE);
-        return { audio: mono, sampling_rate: TTS_SAMPLE_RATE };
-      } finally {
-        try {
-          fs.rmSync(tmp, { force: true });
-        } catch {
-          /* ignore */
-        }
-      }
+      return generateOne(text);
+    },
+    async generateMany(texts) {
+      return generateMany(texts);
     },
     async close() {},
   };
 }
 
+/** Exported for tests — build argv for a single design take. */
+export function vocelloDesignArgvForTests(opts) {
+  return designArgv(opts);
+}
+
 function createMockVocello() {
+  const synth = async (text) => {
+    const sr = TTS_SAMPLE_RATE;
+    const letters = (String(text).match(/[\p{L}\p{N}]/gu) || []).length || 1;
+    const seconds = Math.max(0.2, letters / 4.6);
+    const n = Math.round(seconds * sr);
+    const audio = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const envAmp = Math.min(1, i / (sr * 0.02), (n - i) / (sr * 0.05));
+      audio[i] = Math.sin((2 * Math.PI * 220 * i) / sr) * 0.18 * envAmp;
+    }
+    await new Promise((r) => setImmediate(r));
+    return { audio, sampling_rate: sr };
+  };
   return {
     engine: 'mock-vocello',
+    design: resolveVocelloDesign(),
     async generate(text) {
-      const sr = TTS_SAMPLE_RATE;
-      const letters = (String(text).match(/[\p{L}\p{N}]/gu) || []).length || 1;
-      const seconds = Math.max(0.2, letters / 4.6);
-      const n = Math.round(seconds * sr);
-      const audio = new Float32Array(n);
-      for (let i = 0; i < n; i++) {
-        const envAmp = Math.min(1, i / (sr * 0.02), (n - i) / (sr * 0.05));
-        audio[i] = Math.sin((2 * Math.PI * 220 * i) / sr) * 0.18 * envAmp;
-      }
-      // Yield so mock zh-HK also streams chunk logs like real async TTS.
-      await new Promise((r) => setImmediate(r));
-      return { audio, sampling_rate: sr };
+      return synth(text);
+    },
+    async generateMany(texts) {
+      const out = [];
+      for (const t of texts || []) out.push(await synth(t));
+      return out;
     },
     async close() {},
   };

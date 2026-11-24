@@ -66,15 +66,19 @@ export function initProject(dir, opts = {}) {
   fs.mkdirSync(paths.root, { recursive: true });
   const vars = { title, size, theme, lang };
 
-  for (const name of ['video.json', 'script.md', 'scenes.json']) {
-    const src = fs.readFileSync(path.join(templateDir, name), 'utf8');
+  for (const name of ['video.json', 'script.md', 'scenes.json', 'storyboard.md']) {
+    const srcPath = path.join(templateDir, name);
+    if (!fs.existsSync(srcPath)) continue;
+    const src = fs.readFileSync(srcPath, 'utf8');
     fs.writeFileSync(path.join(paths.root, name), fill(src, vars));
   }
 
   return {
     ok: true,
     dir: paths.root,
-    files: ['video.json', 'script.md', 'scenes.json'],
+    files: ['video.json', 'script.md', 'scenes.json', 'storyboard.md'].filter((n) =>
+      fs.existsSync(path.join(paths.root, n)),
+    ),
     title,
     size,
     theme,

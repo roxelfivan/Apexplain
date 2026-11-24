@@ -66,13 +66,97 @@ function useStubLlm() {
   return process.env.APEXPLAIN_LLM === 'mock';
 }
 
-export function buildExplainerMessages({ topic, subject, intent, outline, lang = 'en' }) {
+/** Strip HTML comments; empty / template-only storyboards count as inactive. */
+export function normalizeStoryboard(text) {
+  return String(text || '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .trim();
+}
+
+export function storyboardIsActive(text) {
+  const s = normalizeStoryboard(text);
+  if (!s) return false;
+  const lines = s
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const substantive = lines.filter((l) => !/^#\s*(Storyboard|分鏡)\b/i.test(l));
+  return substantive.length > 0;
+}
+
+/**
+ * Build outline beats from ## headings in storyboard.md.
+ * Returns null when there are no ## scene headings (caller keeps planOutline).
+ */
+export function outlineFromStoryboard(text, { intent, subject, lang } = {}) {
+  const s = normalizeStoryboard(text);
+  if (!s) return null;
+  const blocks = [];
+  const parts = s.split(/^##\s+/m);
+  for (let i = 1; i < parts.length; i++) {
+    const block = parts[i];
+    const nl = block.indexOf('\n');
+    const headingLine = (nl === -1 ? block : block.slice(0, nl)).trim();
+    const body = (nl === -1 ? '' : block.slice(nl + 1)).trim();
+    if (!headingLine) continue;
+    blocks.push({ headingLine, body });
+  }
+  if (!blocks.length) return null;
+
+  const used = new Set();
+  return blocks.map((b, i) => {
+    // Prefer an explicit scene id token: "## open — Hook" or "## open"
+    const idMatch = b.headingLine.match(/^([A-Za-z0-9][A-Za-z0-9_-]*)\b/);
+    let id = idMatch ? idMatch[1].toLowerCase() : null;
+    let heading = b.headingLine;
+    if (idMatch && /^[A-Za-z0-9][A-Za-z0-9_-]*\s*[—–:\-]\s+/.test(b.headingLine)) {
+      heading = b.headingLine.replace(/^[A-Za-z0-9][A-Za-z0-9_-]*\s*[—–:\-]\s+/, '').trim() || b.headingLine;
+    } else if (idMatch && b.headingLine === idMatch[1]) {
+      heading = idMatch[1];
+    }
+    if (!id || used.has(id) || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id)) {
+      id = slugSceneId(heading, used);
+    } else {
+      used.add(id);
+    }
+    const role =
+      i === 0 ? 'open' : i === blocks.length - 1 && blocks.length > 1 ? 'close' : 'middle';
+    const layout =
+      role === 'open' || role === 'close' ? 'title' : layoutFor(intent || 'topic', heading, i);
+    return {
+      id,
+      role,
+      heading,
+      layout,
+      factHints: b.body
+        ? b.body
+            .split(/\n+/)
+            .map((l) => l.replace(/^[-*]\s+/, '').trim())
+            .filter(Boolean)
+            .slice(0, 6)
+        : [],
+      notes: b.body || '',
+    };
+  });
+}
+
+export function buildExplainerMessages({
+  topic,
+  subject,
+  intent,
+  outline,
+  lang = 'en',
+  storyboard = '',
+}) {
   const zh = lang === 'zh-HK';
+  const boardActive = storyboardIsActive(storyboard);
+  const boardText = boardActive ? normalizeStoryboard(storyboard) : '';
   const beats = (outline || []).map((b) => ({
     id: b.id,
     role: b.role,
     heading: b.heading,
     layout: b.layout,
+    notes: b.notes || undefined,
   }));
   const system = [
     'You write Apexplain explainer videos.',
@@ -88,37 +172,48 @@ export function buildExplainerMessages({ topic, subject, intent, outline, lang =
     'steps/cards/flow: { "layout":"...", "cue":"sentence", "items":[{ "icon":"globe", "text":"..." }] }.',
     'compare: { "layout":"compare", "left":{ "title":"A", "text":"..." }, "right":{ "title":"B", "text":"..." } } — no items.',
     'Icons must be one of: globe, calendar, clock, lightbulb, list, check, arrow-right, arrow-left, star, heart, zap, book, code, cpu, database, file, folder, home, image, link, mail, map, message-circle, play, search, settings, shield, user, users, video, triangle-alert, x, plus, minus, info, sparkles, rocket, target, layers, git-branch.',
+    'cue must be exactly the string "sentence" (or omit it). Never put narration, markers, or other text in cue.',
     'cue:"sentence" reveals item i when sentence i starts. Match item count to sentence count in that scene.',
-    'Follow the given outline ids and suggested layouts unless a layout is clearly wrong for the beat.',
+    boardActive
+      ? 'The user storyboard is authoritative: follow its beat order, scene ids, and notes. Suggested layouts may change only if clearly wrong.'
+      : 'Follow the given outline ids and suggested layouts unless a layout is clearly wrong for the beat.',
   ].join('\n');
-  const user = JSON.stringify(
-    {
-      title: topic,
-      subject,
-      intent,
-      lang: zh ? 'zh-HK' : 'en',
-      outline: beats,
-    },
-    null,
-    2,
-  );
+  const payload = {
+    title: topic,
+    subject,
+    intent,
+    lang: zh ? 'zh-HK' : 'en',
+    outline: beats,
+  };
+  if (boardActive) payload.storyboard = boardText;
+  const user = JSON.stringify(payload, null, 2);
   return [
     { role: 'system', content: system },
     {
       role: 'user',
-      content: `Write script.md + scenes.json for this explainer.\n${user}`,
+      content: boardActive
+        ? `Write script.md + scenes.json for this explainer. Use the storyboard as the base.\n${user}`
+        : `Write script.md + scenes.json for this explainer.\n${user}`,
     },
   ];
 }
 
 /**
- * @param {{ title: string, lang?: string, complete?: Function, log?: Function }} opts
+ * @param {{ title: string, lang?: string, storyboard?: string, complete?: Function, log?: Function }} opts
  */
-export async function generateExplainer({ title, lang = 'en', complete, log = () => {} } = {}) {
+export async function generateExplainer({
+  title,
+  lang = 'en',
+  storyboard = '',
+  complete,
+  log = () => {},
+} = {}) {
   const topic = String(title || 'this topic').trim() || 'this topic';
   const subject = extractSubject(topic);
   const intent = detectIntent(topic);
-  const outline = planOutline({ intent, topic, subject, facts: null, lang });
+  const boardActive = storyboardIsActive(storyboard);
+  const fromBoard = boardActive ? outlineFromStoryboard(storyboard, { intent, subject, lang }) : null;
+  const outline = fromBoard || planOutline({ intent, topic, subject, facts: null, lang });
 
   if (useStubLlm() && !complete) {
     return buildFromOutline({ topic, subject, intent, facts: null, outline, lang });
@@ -137,9 +232,19 @@ export async function generateExplainer({ title, lang = 'en', complete, log = ()
     }
   }
 
-  const messages = buildExplainerMessages({ topic, subject, intent, outline, lang });
+  const messages = buildExplainerMessages({
+    topic,
+    subject,
+    intent,
+    outline,
+    lang,
+    storyboard: boardActive ? storyboard : '',
+  });
   const run = complete || ((msgs, opts) => completeChat(msgs, opts));
-  log(`autogenerate: ${complete ? 'injected' : settings.provider} · ${intent} · ${subject}`);
+  log(
+    `autogenerate: ${complete ? 'injected' : settings.provider} · ${intent} · ${subject}` +
+      (boardActive ? ' · storyboard' : ''),
+  );
 
   let text = await run(messages, { log, settings });
   try {
@@ -152,6 +257,7 @@ export async function generateExplainer({ title, lang = 'en', complete, log = ()
       intent,
       outline: outline.map((b) => ({ id: b.id, role: b.role, heading: b.heading, layout: b.layout })),
       notes: parsed.notes,
+      storyboard: boardActive,
     };
   } catch (first) {
     log(`autogenerate: invalid JSON, retrying (${first.message})`);
@@ -177,6 +283,7 @@ export async function generateExplainer({ title, lang = 'en', complete, log = ()
       intent,
       outline: outline.map((b) => ({ id: b.id, role: b.role, heading: b.heading, layout: b.layout })),
       notes: parsed.notes,
+      storyboard: boardActive,
     };
   }
 }
