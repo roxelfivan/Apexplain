@@ -134,9 +134,9 @@ describe('autogenerate outline', () => {
     assert.ok(!/[这闰猫]/.test(spoken));
   });
 
-  it('writes English subject-named stubs offline (no generic filler)', async () => {
-    const prev = process.env.APEXPLAIN_OFFLINE;
-    process.env.APEXPLAIN_OFFLINE = '1';
+  it('writes English subject-named stubs when APEXPLAIN_LLM=mock', async () => {
+    const prev = process.env.APEXPLAIN_LLM;
+    process.env.APEXPLAIN_LLM = 'mock';
     try {
       const stub = await generateExplainer({ title: 'Why leap years exist', lang: 'en' });
       assert.match(stub.script, /leap years/i);
@@ -145,27 +145,29 @@ describe('autogenerate outline', () => {
       assert.ok(!/Why leap years exist exists/i.test(stub.script));
       assert.match(stub.outline.map((b) => b.heading).join(' '), /why leap years happens|seems odd/i);
     } finally {
-      if (prev == null) delete process.env.APEXPLAIN_OFFLINE;
-      else process.env.APEXPLAIN_OFFLINE = prev;
+      if (prev == null) delete process.env.APEXPLAIN_LLM;
+      else process.env.APEXPLAIN_LLM = prev;
     }
   });
 
-  it('pulls on-topic English Wikipedia copy when online', async () => {
-    const prev = process.env.APEXPLAIN_OFFLINE;
-    delete process.env.APEXPLAIN_OFFLINE;
-    try {
-      const g = await generateExplainer({ title: 'What is a cat?', lang: 'en' });
-      assert.equal(g.intent, 'definition');
-      assert.match(g.script, /cat/i);
-      assert.ok(!/etymology and naming|taxonomy/i.test(g.script));
-      assert.ok(
-        g.source === 'en.wikipedia.org' || /domestic|feline|species|pet|mammal/i.test(g.script),
-        `expected wiki facts or mammal/pet language, got source=${g.source}\n${g.script.slice(0, 400)}`,
-      );
-    } finally {
-      if (prev == null) delete process.env.APEXPLAIN_OFFLINE;
-      else process.env.APEXPLAIN_OFFLINE = prev;
-    }
+  it('asks the LLM backend for on-topic copy (injected complete)', async () => {
+    const g = await generateExplainer({
+      title: 'What is a cat?',
+      lang: 'en',
+      complete: async () =>
+        JSON.stringify({
+          script:
+            '# Cat\n\n## open\n[#hook] A cat is a small domestic mammal. [#angle] People keep cats as pets.\n\n## close {hold=1}\n[#close] Cats are companions. [#thanks] Thanks for watching.\n',
+          scenes: {
+            open: { layout: 'title', title: 'Cat', subtitle: 'Domestic mammal' },
+            close: { layout: 'title', title: 'Companions', subtitle: 'Thanks' },
+          },
+        }),
+    });
+    assert.equal(g.intent, 'definition');
+    assert.equal(g.source, 'injected');
+    assert.match(g.script, /cat/i);
+    assert.ok(!/etymology and naming|taxonomy/i.test(g.script));
   });
 });
 

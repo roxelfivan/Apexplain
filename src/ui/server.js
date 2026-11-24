@@ -9,6 +9,9 @@ import { ApexError } from '../errors.js';
 import { doctor } from '../doctor.js';
 import { generateExplainer, slugifyName } from '../generate.js';
 import { initProject } from '../init.js';
+import { llmReady } from '../llm/complete.js';
+import { LLM_PROVIDERS, publicLlmSettings, saveLlmSettings } from '../llm/config.js';
+import { loadGemma, probeGemma } from '../llm/gemma.js';
 import { make } from '../make.js';
 import { packageVersion, projectPaths, ROOT } from '../paths.js';
 import { loadProject } from '../project.js';
@@ -117,7 +120,73 @@ async function handleApi(req, res, url) {
         videosRoot: videosRoot(),
         doctor: doctor({ lang: 'en' }),
         doctorZh: doctor({ lang: 'zh-HK' }),
+        llm: { ...publicLlmSettings(), ready: llmReady(), gemma: probeGemma() },
       });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/settings') {
+      return sendJson(res, 200, {
+        ok: true,
+        ...publicLlmSettings(),
+        providers: LLM_PROVIDERS.map((p) => ({
+          id: p.id,
+          label: p.label,
+          requiresApiKey: p.requiresApiKey,
+          defaultEndpoint: p.defaultEndpoint,
+          defaultModel: p.defaultModel,
+          modelPresets: p.modelPresets,
+          helpText: p.helpText,
+          apiKeyPlaceholder: p.apiKeyPlaceholder,
+        })),
+        ready: llmReady(),
+        gemma: probeGemma(),
+      });
+    }
+
+    if (req.method === 'PUT' && url.pathname === '/api/settings') {
+      const body = await readBody(req);
+      const saved = saveLlmSettings({
+        provider: body.provider,
+        apiEndpoint: body.apiEndpoint,
+        model: body.model,
+        apiKey: body.apiKey,
+        clearApiKey: !!body.clearApiKey,
+      });
+      return sendJson(res, 200, {
+        ok: true,
+        ...publicLlmSettings(saved),
+        ready: llmReady(saved),
+        gemma: probeGemma(),
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/settings/gemma/download') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      if (res.socket) res.socket.setNoDelay(true);
+      const send = (event, data) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+      const logLine = async (line) => {
+        send('log', { line: String(line) });
+        await new Promise((r) => setImmediate(r));
+      };
+      send('status', { state: 'started' });
+      try {
+        await loadGemma({ log: logLine, allowHf: true });
+        const gemma = probeGemma();
+        send('status', { state: 'done' });
+        send('done', { ok: gemma.ok, gemma });
+      } catch (err) {
+        send('status', { state: 'error' });
+        send('error', { message: err.message, path: err.path, rule: err.rule, hint: err.hint });
+      }
+      res.end();
+      return;
     }
 
     if (req.method === 'GET' && url.pathname === '/api/projects') {
@@ -173,9 +242,11 @@ async function handleApi(req, res, url) {
       video.title = title;
       video.lang = lang;
       if (lang === 'zh-HK') video.voice = video.voice || 'vocello';
+      const logs = [];
       const { script, scenes, source, subject, outline, intent } = await generateExplainer({
         title,
         lang,
+        log: (line) => logs.push(String(line)),
       });
       const videoText = JSON.stringify(video, null, 2) + '\n';
       const scenesText = JSON.stringify(scenes, null, 2) + '\n';
@@ -192,6 +263,8 @@ async function handleApi(req, res, url) {
         subject: subject || null,
         intent: intent || null,
         outline: Array.isArray(outline) ? outline.map((b) => b.heading) : null,
+        llm: source || null,
+        logs,
       });
     }
 

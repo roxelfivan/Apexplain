@@ -23,7 +23,7 @@ Usage:
 
 Full make: validate → voice (cached) → layout-check → render → MP4.
 Make/TTS are local-first (no Hugging Face unless APEXPLAIN_ALLOW_HF=1).
-Autogenerate may use Wikipedia for topic copy (APEXPLAIN_OFFLINE=1 forces stubs).
+Autogenerate uses the UI Settings LLM (local Gemma or MiniMax API key).
 lang=en uses local Kokoro. lang=zh-HK uses local Vocello CLI (npm run setup:vocello).
 APEXPLAIN_TTS=mock skips models (tests).
 See: apexplain docs plan

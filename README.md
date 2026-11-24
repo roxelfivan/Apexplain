@@ -38,22 +38,24 @@ Vocello is an **external Mac CLI** (not an npm or pip package). Apexplain only s
 
 ## Local-first runtime
 
-After setup, **make / UI / preview / voice** use only on-disk assets — no Hugging Face, no Wikipedia, no cloud TTS.
+After setup, **make / UI / preview / voice** use only on-disk assets — no Hugging Face, no cloud TTS.
 
 | Path | Network? |
 |------|----------|
 | `make`, `preview`, `ui` Make video | **No** — Kokoro from `~/.cache/apexplain`, Vocello from local MLX models, ffmpeg/canvas/fonts from disk |
-| Autogenerate | **Yes, Wikipedia** for on-topic script facts (falls back to subject stubs). Set `APEXPLAIN_OFFLINE=1` to force stubs |
+| Autogenerate | **Local Gemma** (after `npm run setup:gemma` / Settings download) or **MiniMax** HTTPS if you pasted a key. `APEXPLAIN_LLM=mock` forces stubs |
 | `npm run setup:kokoro` | **Once** — downloads ~88 MB into the local cache |
+| `npm run setup:gemma` | **Once** — downloads Gemma 2 2B Instruct ONNX (~2 GB) for Autogenerate |
 | `npm run setup:vocello` | **Once** — Vocello downloads ~2.23 GB Voice Design weights |
 
 Env knobs:
 
 | Variable | Effect |
 |----------|--------|
-| `APEXPLAIN_ALLOW_HF=1` | Allow Hugging Face download at Kokoro load (setup script sets this) |
-| `APEXPLAIN_OFFLINE=1` | Force stub Autogenerate (no Wikipedia); TTS still needs local weights |
-| `APEXPLAIN_TTS=mock` | No models (tests) |
+| `APEXPLAIN_ALLOW_HF=1` | Allow Hugging Face download at Kokoro/Gemma load (setup scripts set this) |
+| `APEXPLAIN_LLM=mock` | Stub Autogenerate (tests); no Gemma/MiniMax |
+| `APEXPLAIN_MINIMAX_API_KEY` | Overrides the MiniMax key stored in `~/.config/apexplain/llm.json` |
+| `APEXPLAIN_TTS=mock` | No TTS models (tests) |
 
 ## Installation
 
@@ -107,6 +109,11 @@ node bin/apexplain.js ui --port 3847
 ```
 
 Projects live under `videos/` (override with `APEXPLAIN_VIDEOS`).
+
+**Settings** (gear) picks the Autogenerate backend, same idea as [apeditor](https://github.com/roxelfivan/apeditor):
+
+- **Local Model (require around 2gb disk space)** — Gemma 2 2B Instruct ONNX on this machine (`npm run setup:gemma` or Download in Settings). No API key.
+- **Minimax** — paste your API key (stored in `~/.config/apexplain/llm.json`, mode 0600). Default endpoint `https://api.minimax.io/v1`, model `MiniMax-M2.7`.
 
 ### Chinese project
 
