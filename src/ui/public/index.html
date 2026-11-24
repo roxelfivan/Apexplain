@@ -2,22 +2,64 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
     <title>Apexplain</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="app">
-      <aside class="sidebar">
-        <header class="brand">
-          <div class="brand-row">
-            <h1>Apexplain</h1>
-            <button id="settingsBtn" type="button" class="icon-btn" title="Settings (LLM)">⚙</button>
-          </div>
-          <p class="muted" id="version">…</p>
-          <p class="muted" id="llmStatus">LLM: …</p>
-        </header>
+    <a class="skip-link" href="#main">Skip to editor</a>
 
+    <header class="topbar">
+      <button
+        id="navToggle"
+        type="button"
+        class="icon-btn nav-toggle"
+        aria-controls="sidebar"
+        aria-expanded="false"
+        aria-label="Open projects menu"
+      >
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            d="M4 7h16M4 12h16M4 17h16"
+          />
+        </svg>
+      </button>
+      <div class="brand-compact">
+        <h1>Apexplain</h1>
+        <p class="muted" id="version">…</p>
+      </div>
+      <p class="muted llm-chip" id="llmStatus">LLM: …</p>
+      <button id="settingsBtn" type="button" class="icon-btn" title="Settings (LLM)" aria-label="Settings">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+          />
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+          />
+        </svg>
+      </button>
+    </header>
+
+    <div id="backdrop" class="backdrop" hidden></div>
+
+    <div class="app">
+      <aside id="sidebar" class="sidebar" aria-label="Projects">
         <section>
           <h2>Projects</h2>
           <ul id="projectList" class="project-list"></ul>
@@ -25,22 +67,29 @@
 
         <section class="new-project">
           <h2>New project</h2>
-          <label
+          <label for="newTitle"
             >Title
-            <input id="newTitle" placeholder="e.g. Why leap years exist" />
+            <input id="newTitle" placeholder="e.g. Why leap years exist" autocomplete="off" aria-describedby="createHint createError" />
           </label>
-          <label
+          <label for="newName"
             >Folder name
-            <input id="newName" placeholder="auto from title (a-z, 0-9, -)" />
+            <input
+              id="newName"
+              placeholder="auto from title (a-z, 0-9, -)"
+              autocomplete="off"
+              spellcheck="false"
+              autocapitalize="off"
+              aria-describedby="createHint createError"
+            />
           </label>
-          <label
+          <label for="newLang"
             >Language
             <select id="newLang">
               <option value="en">English</option>
               <option value="zh-HK">Chinese (繁體 / Vocello)</option>
             </select>
           </label>
-          <label
+          <label for="newSize"
             >Size
             <select id="newSize">
               <option value="16:9">16:9</option>
@@ -49,25 +98,29 @@
           </label>
           <p id="createHint" class="hint">Tip: folder name cannot have spaces. Leave blank to auto-fill.</p>
           <button id="createBtn" type="button" class="primary">Create</button>
-          <p id="createError" class="err banner hidden"></p>
+          <p id="createError" class="err banner hidden" role="alert" tabindex="-1"></p>
         </section>
       </aside>
 
-      <main class="main">
+      <main id="main" class="main" tabindex="-1">
         <div id="empty" class="empty">
           <div>
-            <p>Create a project on the left, then edit <code>video.json</code>, <code>script.md</code>, and <code>scenes.json</code> here.</p>
+            <p>
+              Create a project, then edit <code>video.json</code>, <code>script.md</code>, and
+              <code>scenes.json</code> here.
+            </p>
             <p class="muted">After Create, the editor opens automatically.</p>
+            <button id="emptyOpenNav" type="button" class="primary empty-cta">Create a project</button>
           </div>
         </div>
 
         <div id="editor" class="editor hidden">
           <header class="toolbar">
-            <div>
+            <div class="toolbar-title">
               <h2 id="projectTitle">Project</h2>
               <p class="muted" id="projectMeta"></p>
             </div>
-            <div class="actions">
+            <div class="actions" id="editorActions">
               <button id="generateBtn" type="button" class="secondary" title="Fill script + scenes from the title">
                 Autogenerate
               </button>
@@ -79,35 +132,41 @@
 
           <p class="hint">
             Edit the tabs below, click <strong>Save</strong>, then <strong>Make video</strong>.
-            <strong>Autogenerate</strong> uses the LLM in <strong>Settings</strong> (local Gemma or MiniMax)
-            to rewrite script + scenes from the title in <code>video.json</code>.
+            <strong>Autogenerate</strong> uses the LLM in <strong>Settings</strong> (local Gemma or MiniMax) to rewrite
+            script + scenes from the title in <code>video.json</code>.
           </p>
 
-          <div class="tabs" role="tablist">
-            <button type="button" class="tab active" data-tab="video">video.json</button>
-            <button type="button" class="tab" data-tab="script">script.md</button>
-            <button type="button" class="tab" data-tab="scenes">scenes.json</button>
+          <div class="tabs" role="tablist" aria-label="Project files">
+            <button type="button" class="tab active" role="tab" id="tab-video" data-tab="video" aria-controls="panel-video" aria-selected="true">
+              video.json
+            </button>
+            <button type="button" class="tab" role="tab" id="tab-script" data-tab="script" aria-controls="panel-script" aria-selected="false" tabindex="-1">
+              script.md
+            </button>
+            <button type="button" class="tab" role="tab" id="tab-scenes" data-tab="scenes" aria-controls="panel-scenes" aria-selected="false" tabindex="-1">
+              scenes.json
+            </button>
           </div>
 
           <div class="panes">
-            <label class="pane tab-panel active" data-panel="video">
-              <span>Settings (title, lang, size, voice…)</span>
-              <textarea id="videoEditor" spellcheck="false"></textarea>
-            </label>
-            <label class="pane tab-panel" data-panel="script">
-              <span>Narration — use ## scene-id blocks</span>
-              <textarea id="scriptEditor" spellcheck="false"></textarea>
-            </label>
-            <label class="pane tab-panel" data-panel="scenes">
-              <span>On-screen layouts — keys must match script scene ids</span>
-              <textarea id="scenesEditor" spellcheck="false"></textarea>
-            </label>
+            <div class="pane tab-panel active" role="tabpanel" id="panel-video" data-panel="video" aria-labelledby="tab-video">
+              <label for="videoEditor">Settings (title, lang, size, voice…)</label>
+              <textarea id="videoEditor" spellcheck="false" autocomplete="off"></textarea>
+            </div>
+            <div class="pane tab-panel" role="tabpanel" id="panel-script" data-panel="script" aria-labelledby="tab-script" hidden>
+              <label for="scriptEditor">Narration — use ## scene-id blocks</label>
+              <textarea id="scriptEditor" spellcheck="false" autocomplete="off"></textarea>
+            </div>
+            <div class="pane tab-panel" role="tabpanel" id="panel-scenes" data-panel="scenes" aria-labelledby="tab-scenes" hidden>
+              <label for="scenesEditor">On-screen layouts — keys must match script scene ids</label>
+              <textarea id="scenesEditor" spellcheck="false" autocomplete="off"></textarea>
+            </div>
           </div>
 
           <section class="output" id="output">
             <div class="output-head">
               <h3>Output</h3>
-              <span id="outputStatus" class="output-status muted">idle</span>
+              <span id="outputStatus" class="output-status muted" role="status">idle</span>
             </div>
             <pre id="log" class="log"></pre>
             <video id="player" controls playsinline></video>
@@ -119,17 +178,21 @@
       <div class="modal-card">
         <div class="modal-head">
           <h2 id="settingsTitle">Settings</h2>
-          <button id="settingsClose" type="button" class="icon-btn" aria-label="Close">×</button>
+          <button id="settingsClose" type="button" class="icon-btn" aria-label="Close">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
         <div class="modal-body">
-          <label
+          <label for="llmProvider"
             >Provider
             <select id="llmProvider"></select>
           </label>
           <p id="llmHelp" class="hint"></p>
 
           <div id="minimaxFields" class="hidden">
-            <label
+            <label for="llmApiKey"
               >API key
               <span class="key-row">
                 <input id="llmApiKey" type="password" autocomplete="off" spellcheck="false" />
@@ -141,13 +204,13 @@
               <code>Authorization: Bearer</code> to the HTTPS endpoint. Do not leave a key on a shared computer.
             </p>
             <button id="llmClearKey" type="button" class="secondary">Clear saved key</button>
-            <label
+            <label for="llmEndpoint"
               >API endpoint
-              <input id="llmEndpoint" spellcheck="false" />
+              <input id="llmEndpoint" spellcheck="false" autocomplete="off" />
             </label>
-            <label
+            <label for="llmModel"
               >Model
-              <input id="llmModel" list="llmModelList" spellcheck="false" />
+              <input id="llmModel" list="llmModelList" spellcheck="false" autocomplete="off" />
             </label>
             <datalist id="llmModelList"></datalist>
           </div>
@@ -156,7 +219,14 @@
             <p id="gemmaStatus" class="hint">Checking Local Gemma…</p>
             <div class="actions">
               <button id="gemmaDownload" type="button" class="primary">Download from Hugging Face</button>
-              <a id="gemmaHfLink" class="btn-link" href="https://huggingface.co/onnx-community/gemma-2-2b-it-ONNX" target="_blank" rel="noopener noreferrer">Open on Hugging Face</a>
+              <a
+                id="gemmaHfLink"
+                class="btn-link"
+                href="https://huggingface.co/onnx-community/gemma-2-2b-it-ONNX"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Open on Hugging Face</a
+              >
             </div>
             <pre id="gemmaLog" class="log gemma-log hidden"></pre>
           </div>
@@ -165,7 +235,7 @@
           <button id="settingsCancel" type="button">Cancel</button>
           <button id="settingsSave" type="button" class="primary">Save</button>
         </div>
-        <p id="settingsError" class="err banner hidden"></p>
+        <p id="settingsError" class="err banner hidden" role="alert"></p>
       </div>
     </div>
     <script src="/app.js" type="module"></script>

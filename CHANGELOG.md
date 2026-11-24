@@ -8,6 +8,7 @@
 - `npm run setup:gemma`; settings file `~/.config/apexplain/llm.json` (0600)
 
 ### Changed
+- Local web UI is mobile-first: project drawer, sticky Make/Save bar, larger tap targets, visible focus, and Settings as a phone sheet
 - Autogenerate no longer writes scripts from Wikipedia (outline intent is unchanged; copy comes from the Settings LLM)
 - `APEXPLAIN_LLM=mock` keeps stub Autogenerate for tests
 
