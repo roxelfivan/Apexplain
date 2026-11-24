@@ -10,6 +10,17 @@ import { doctor } from '../doctor.js';
 import { generateExplainer, slugifyName } from '../generate.js';
 import { initProject } from '../init.js';
 import { make } from '../make.js';
+import {
+  clearKokoro,
+  clearVocello,
+  exportKokoro,
+  exportVocello,
+  importKokoro,
+  importVocello,
+  modelsSnapshot,
+  setupKokoro,
+  setupVocello,
+} from '../model-manager.js';
 import { packageVersion, projectPaths, ROOT } from '../paths.js';
 import { loadProject } from '../project.js';
 
@@ -108,6 +119,47 @@ function listProjects() {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function startSse(res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-store, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  if (res.socket) res.socket.setNoDelay(true);
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+  const log = async (line) => {
+    send('log', { line: String(line) });
+    await new Promise((r) => setImmediate(r));
+  };
+  log.update = (msg) => {
+    send('progress', { line: String(msg) });
+  };
+  return { send, log };
+}
+
+async function streamApiJob(res, fn) {
+  const { send, log } = startSse(res);
+  send('status', { state: 'started' });
+  try {
+    const result = await fn(log);
+    send('status', { state: 'done' });
+    send('done', { ok: true, result: result || null, models: modelsSnapshot() });
+  } catch (err) {
+    send('status', { state: 'error' });
+    send('error', {
+      message: err.message,
+      path: err.path,
+      rule: err.rule,
+      hint: err.hint,
+      code: err.code,
+    });
+  }
+  res.end();
+}
+
 async function handleApi(req, res, url) {
   try {
     if (req.method === 'GET' && url.pathname === '/api/meta') {
@@ -117,6 +169,42 @@ async function handleApi(req, res, url) {
         videosRoot: videosRoot(),
         doctor: doctor({ lang: 'en' }),
         doctorZh: doctor({ lang: 'zh-HK' }),
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/models') {
+      return sendJson(res, 200, modelsSnapshot());
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/models/kokoro/setup') {
+      return streamApiJob(res, (log) => setupKokoro({ log }));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/models/vocello/setup') {
+      return streamApiJob(res, (log) => setupVocello({ log }));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/models/kokoro/clear') {
+      return sendJson(res, 200, { ok: true, probe: clearKokoro(), models: modelsSnapshot() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/models/vocello/clear') {
+      return streamApiJob(res, (log) => clearVocello({ log }));
+    }
+
+    const modelIo = url.pathname.match(/^\/api\/models\/(kokoro|vocello)\/(export|import)$/);
+    if (modelIo && req.method === 'POST') {
+      const [, engine, action] = modelIo;
+      const body = await readBody(req);
+      const dest = body.path;
+      let lastSave;
+      let probe;
+      if (engine === 'kokoro' && action === 'export') lastSave = exportKokoro(dest);
+      else if (engine === 'kokoro' && action === 'import') probe = importKokoro(dest);
+      else if (engine === 'vocello' && action === 'export') lastSave = exportVocello(dest);
+      else probe = importVocello(dest);
+      return sendJson(res, 200, {
+        ok: true,
+        lastSave: lastSave || null,
+        probe: probe || null,
+        models: modelsSnapshot(),
       });
     }
 
@@ -350,14 +438,16 @@ export function startUi({ port = 3847, host = '127.0.0.1' } = {}) {
 
   return new Promise((resolve, reject) => {
     server.listen(port, host, () => {
-      const addr = `http://${host}:${port}`;
+      const bound = server.address();
+      const actualPort = typeof bound === 'object' && bound ? bound.port : port;
+      const addr = `http://${host}:${actualPort}`;
       process.stdout.write(
         `apexplain ui ${packageVersion()}\n` +
           `open ${addr}\n` +
           `projects folder: ${videosRoot()}\n` +
           `press Ctrl+C to stop\n`,
       );
-      resolve({ server, url: addr });
+      resolve({ server, url: addr, port: actualPort });
     });
     server.on('error', reject);
   });

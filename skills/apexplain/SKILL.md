@@ -27,7 +27,9 @@ In a checkout: `node bin/apexplain.js …`.
 - **zh-HK:** Traditional Chinese on-screen; narration via external **Vocello** CLI (`voice`: `vocello`)
   - MVP only: Voice Design + Cantonese brief (no cloud speakers, no custom-mode surface)
   - Needs: Apple Silicon, Vocello CLI + `pro_design_speed` (~2.23 GB), TC font or `APEXPLAIN_FONT`
-  - English Kokoro weights: ~88 MB via `npm run setup:kokoro`
+  - English Kokoro weights: ~88 MB via `npm run setup:kokoro` or UI **Settings** (not stored in git)
+  - Weights are on-demand: install Kokoro, Vocello, both, or neither
+  - Settings can Save to Disk / Load from a local copy — see `docs/settings.md`
 
 ## Files
 

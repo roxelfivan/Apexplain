@@ -8,6 +8,10 @@ const TOPICS = {
     file: 'apexplain-token-mvp.md',
     summary: 'Phased MVP plan: product target, architecture, Phase 1–6',
   },
+  settings: {
+    file: 'settings.md',
+    summary: 'On-demand TTS models: Hugging Face Kokoro, Vocello, save/load local copies',
+  },
   overview: {
     file: null,
     summary: 'What Apexplain is and how agents should use it',
@@ -21,8 +25,8 @@ Apexplain turns \`script.md\` + \`scenes.json\` into a narrated MP4.
 4. \`apexplain make videos/<name> --dry-run\` then \`apexplain make videos/<name>\`.
 5. Or open the UI: \`apexplain ui --port 3847\`.
 
-\`lang=en\` → local Kokoro. \`lang=zh-HK\` → local Vocello CLI (Voice Design + Cantonese brief; \`npm run setup:vocello\`).
-Make/TTS are local-first (HF only with \`APEXPLAIN_ALLOW_HF=1\`). Autogenerate may use Wikipedia for on-topic copy.
+\`lang=en\` → local Kokoro. \`lang=zh-HK\` → local Vocello CLI (Voice Design + Cantonese brief; \`npm run setup:vocello\` or UI Settings).
+TTS weights are **not in git** — download on demand (either/both engines). Make/TTS are local-first (HF only with \`APEXPLAIN_ALLOW_HF=1\`). Autogenerate may use Wikipedia for on-topic copy.
 
 Layouts: \`title\`, \`cards\`, \`steps\`, \`compare\`, \`flow\`. Output: \`out/video.mp4\`.
 `,

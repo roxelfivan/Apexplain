@@ -45,4 +45,12 @@ describe('phase 1 cli', () => {
     const body = JSON.parse(r.stdout);
     assert.equal(body.checks.find((c) => c.name === 'node').ok, true);
   });
+
+  it('docs settings explains on-demand models', () => {
+    const r = run(['docs', 'settings']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /not.*ship full-size TTS/i);
+    assert.match(r.stdout, /Download from Hugging Face/);
+    assert.match(r.stdout, /Vocello/);
+  });
 });

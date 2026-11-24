@@ -74,6 +74,11 @@ export function probeKokoro() {
 
 let ttsPromise = null;
 
+/** Drop the cached Kokoro engine (after setup, import, or cache clear). */
+export function resetTTS() {
+  ttsPromise = null;
+}
+
 /**
  * Load KokoroTTS. With APEXPLAIN_TTS=mock, returns a tiny sine-wave synthesizer
  * (for tests; no model download).

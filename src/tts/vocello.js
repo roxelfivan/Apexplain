@@ -58,7 +58,7 @@ function runVocelloSync(bin, args, timeout = 30000) {
  * Async Vocello run — does not block the Node event loop, so SSE log lines
  * can flush between Chinese chunks the same way English Kokoro does.
  */
-function runVocelloAsync(bin, args, timeout = 600000) {
+function runVocelloAsync(bin, args, timeout = 600000, { onStdout, onStderr } = {}) {
   return new Promise((resolve) => {
     const child = spawn(bin, args, {
       env: { ...process.env },
@@ -88,10 +88,12 @@ function runVocelloAsync(bin, args, timeout = 600000) {
     child.stdout.on('data', (d) => {
       stdout += d;
       if (stdout.length > 8 * 1024 * 1024) stdout = stdout.slice(-4 * 1024 * 1024);
+      if (onStdout) onStdout(d);
     });
     child.stderr.on('data', (d) => {
       stderr += d;
       if (stderr.length > 8 * 1024 * 1024) stderr = stderr.slice(-4 * 1024 * 1024);
+      if (onStderr) onStderr(d);
     });
     child.on('error', (error) => {
       if (settled) return;
@@ -170,7 +172,108 @@ export function probeVocello() {
     detail: `Vocello ${version} · design · ${VOCELLO_DESIGN_MODEL}`,
     bin,
     version,
+    modelDir: vocelloDesignModelDir(),
   };
+}
+
+export function vocelloBinPath() {
+  return whichVocello();
+}
+
+/** Directory that holds Vocello Voice Design weights. */
+export function vocelloModelsRoot() {
+  if (process.env.APEXPLAIN_VOCELLO_MODELS) {
+    return path.resolve(expandHome(process.env.APEXPLAIN_VOCELLO_MODELS));
+  }
+  return path.join(os.homedir(), 'Library', 'Application Support', 'QwenVoice', 'models');
+}
+
+export function vocelloDesignModelDir() {
+  return path.join(vocelloModelsRoot(), VOCELLO_DESIGN_MODEL);
+}
+
+function expandHome(p) {
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
+  return p;
+}
+
+function logVocelloStream(log, chunk) {
+  const text = String(chunk || '');
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (t) log(t);
+  }
+}
+
+/**
+ * Pull `pro_design_speed` via the Vocello CLI (large; needs network).
+ */
+export async function installVocelloDesignModel({ log = () => {} } = {}) {
+  const bin = whichVocello();
+  if (!bin) {
+    throw new ApexError('vocello CLI not found', {
+      code: 'vocello_setup',
+      rule: 'cli',
+      hint: 'Install Vocello CLI: https://github.com/PowerBeef/Vocello/releases',
+    });
+  }
+  log(`Found: ${bin}`);
+  log(`Installing ${VOCELLO_DESIGN_MODEL}…`);
+  const r = await runVocelloAsync(bin, ['models', 'install', VOCELLO_DESIGN_MODEL], 30 * 60 * 1000, {
+    onStdout: (d) => logVocelloStream(log, d),
+    onStderr: (d) => logVocelloStream(log, d),
+  });
+  if (r.status !== 0) {
+    throw new ApexError(
+      `vocello models install failed: ${(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).slice(0, 400)}`,
+      {
+        code: 'vocello_setup',
+        rule: 'install',
+        hint: `vocello models install ${VOCELLO_DESIGN_MODEL}`,
+      },
+    );
+  }
+  const probe = probeVocello();
+  if (!probe.ok) {
+    throw new ApexError(`Vocello still not ready: ${probe.detail}`, {
+      code: 'vocello_setup',
+      rule: 'probe',
+      hint: probe.fix,
+    });
+  }
+  return probe;
+}
+
+/**
+ * Best-effort uninstall. If the CLI has no uninstall command, callers should
+ * show the model path instead of deleting files blindly.
+ */
+export async function uninstallVocelloDesignModel({ log = () => {} } = {}) {
+  const bin = whichVocello();
+  if (!bin) {
+    throw new ApexError('vocello CLI not found', {
+      code: 'vocello_clear',
+      rule: 'cli',
+      hint: `Remove ${vocelloDesignModelDir()} yourself if the model was installed.`,
+    });
+  }
+  log(`Trying: ${bin} models uninstall ${VOCELLO_DESIGN_MODEL}`);
+  const r = await runVocelloAsync(bin, ['models', 'uninstall', VOCELLO_DESIGN_MODEL], 120000, {
+    onStdout: (d) => logVocelloStream(log, d),
+    onStderr: (d) => logVocelloStream(log, d),
+  });
+  if (r.status !== 0) {
+    throw new ApexError(
+      `Vocello has no uninstall (or it failed): ${(r.stderr || r.stdout || `exit ${r.status}`).slice(0, 300)}`,
+      {
+        code: 'vocello_clear',
+        rule: 'uninstall',
+        hint: `Delete the model folder yourself: ${vocelloDesignModelDir()}`,
+      },
+    );
+  }
+  return probeVocello();
 }
 
 export function createVocelloWorker({ log = () => {} } = {}) {

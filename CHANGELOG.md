@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.4 — 2026-11-24
+
+### Added
+- UI **Settings** (gear): on-demand Kokoro (Hugging Face) and/or Vocello download, Save to Disk, Load from a local copy
+- [docs/settings.md](docs/settings.md) — models are **not** in git; clone stays small
+
+### Changed
+- README / skill / doctor docs: English vs zh-HK installs are independent; `video.json` tab labeled Project
+
 ## 0.0.3 — 2026-11-24
 
 ### Added

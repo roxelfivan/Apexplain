@@ -10,7 +10,12 @@
     <div class="app">
       <aside class="sidebar">
         <header class="brand">
-          <h1>Apexplain</h1>
+          <div class="brand-row">
+            <h1>Apexplain</h1>
+            <button id="settingsBtn" type="button" class="icon-btn" title="Settings (TTS models)" aria-label="Settings">
+              ⚙
+            </button>
+          </div>
           <p class="muted" id="version">…</p>
         </header>
 
@@ -79,14 +84,14 @@
           </p>
 
           <div class="tabs" role="tablist">
-            <button type="button" class="tab active" data-tab="video">video.json</button>
+            <button type="button" class="tab active" data-tab="video">Project</button>
             <button type="button" class="tab" data-tab="script">script.md</button>
             <button type="button" class="tab" data-tab="scenes">scenes.json</button>
           </div>
 
           <div class="panes">
             <label class="pane tab-panel active" data-panel="video">
-              <span>Settings (title, lang, size, voice…)</span>
+              <span>Project (title, lang, size, voice…)</span>
               <textarea id="videoEditor" spellcheck="false"></textarea>
             </label>
             <label class="pane tab-panel" data-panel="script">
@@ -109,6 +114,85 @@
           </section>
         </div>
       </main>
+    </div>
+    <div id="settingsOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal">
+        <header class="modal-head">
+          <div>
+            <h2 id="settingsTitle">Settings</h2>
+            <p class="muted">TTS models are not in git. Download only what you need, or load a copy you saved earlier.</p>
+          </div>
+          <button id="settingsClose" type="button" class="icon-btn" aria-label="Close settings">×</button>
+        </header>
+
+        <section class="model-card" data-engine="kokoro">
+          <h3>English — Kokoro-82M</h3>
+          <p class="muted">
+            No API key — runs on this machine. Model <code>onnx-community/Kokoro-82M-v1.0-ONNX</code>
+            (<span data-size="kokoro">~88 MB</span>). Cached under <code data-cache-root>~/.cache/apexplain</code>
+            after download; never uploaded. Use Save to Disk for an offline copy.
+          </p>
+          <p>Status: <strong data-status="kokoro">checking…</strong></p>
+          <p class="muted">Last saved: <span data-lastsave="kokoro">Not saved to disk yet.</span></p>
+          <p class="muted" data-path="kokoro"></p>
+          <div class="progress hidden" data-progress="kokoro">
+            <div class="progress-bar"><span></span></div>
+            <pre class="job-log" data-log="kokoro"></pre>
+          </div>
+          <p class="err hidden" data-error="kokoro"></p>
+          <div class="model-actions">
+            <button type="button" class="primary" data-act="kokoro-download">Download from Hugging Face</button>
+            <button type="button" class="secondary" data-act="kokoro-export">Save to Disk</button>
+            <button type="button" class="secondary" data-act="kokoro-import">Load from disk…</button>
+            <button type="button" class="secondary" data-act="kokoro-clear">Clear cached model</button>
+            <a class="btn-link" href="https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX" target="_blank" rel="noopener noreferrer">Open on Hugging Face</a>
+          </div>
+          <label class="path-field hidden" data-pathfield="kokoro-export">
+            Save copy to folder
+            <input data-input="kokoro-export" placeholder="/absolute/path/to/kokoro-copy" />
+            <button type="button" class="primary" data-act="kokoro-export-go">Save</button>
+          </label>
+          <label class="path-field hidden" data-pathfield="kokoro-import">
+            Load from folder (tokenizer.json + onnx/*.onnx)
+            <input data-input="kokoro-import" placeholder="/absolute/path/to/saved/kokoro" />
+            <button type="button" class="primary" data-act="kokoro-import-go">Load</button>
+          </label>
+        </section>
+
+        <section class="model-card" data-engine="vocello">
+          <h3>zh-HK — Vocello (pro_design_speed)</h3>
+          <p class="muted">
+            External Mac CLI (Apple Silicon). Model <code>pro_design_speed</code>
+            (<span data-size="vocello">~2.23 GB</span>). Install either or both engines independently.
+            Weights live under QwenVoice, not in this GitHub repo.
+          </p>
+          <p>Status: <strong data-status="vocello">checking…</strong></p>
+          <p class="muted">Last saved: <span data-lastsave="vocello">Not saved to disk yet.</span></p>
+          <p class="muted" data-path="vocello"></p>
+          <div class="progress hidden" data-progress="vocello">
+            <div class="progress-bar"><span></span></div>
+            <pre class="job-log" data-log="vocello"></pre>
+          </div>
+          <p class="err hidden" data-error="vocello"></p>
+          <div class="model-actions">
+            <button type="button" class="primary" data-act="vocello-download">Download Vocello model</button>
+            <button type="button" class="secondary" data-act="vocello-export">Save to Disk</button>
+            <button type="button" class="secondary" data-act="vocello-import">Load from disk…</button>
+            <button type="button" class="secondary" data-act="vocello-clear">Clear cached model</button>
+            <a class="btn-link" href="https://github.com/PowerBeef/Vocello/releases" target="_blank" rel="noopener noreferrer">Vocello releases</a>
+          </div>
+          <label class="path-field hidden" data-pathfield="vocello-export">
+            Save copy to folder
+            <input data-input="vocello-export" placeholder="/absolute/path/to/vocello-copy" />
+            <button type="button" class="primary" data-act="vocello-export-go">Save</button>
+          </label>
+          <label class="path-field hidden" data-pathfield="vocello-import">
+            Load from folder (saved pro_design_speed copy)
+            <input data-input="vocello-import" placeholder="/absolute/path/to/saved/pro_design_speed" />
+            <button type="button" class="primary" data-act="vocello-import-go">Load</button>
+          </label>
+        </section>
+      </div>
     </div>
     <script src="/app.js" type="module"></script>
   </body>

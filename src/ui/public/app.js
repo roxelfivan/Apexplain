@@ -426,6 +426,280 @@ $('generateBtn').addEventListener('click', () => autogenerate());
 $('dryBtn').addEventListener('click', () => runMake({ dryRun: true }));
 $('makeBtn').addEventListener('click', () => runMake({ dryRun: false }));
 
+function formatSaved(last) {
+  if (!last) return 'Not saved to disk yet.';
+  let when = '';
+  try {
+    when = new Date(last.savedAt).toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  } catch {
+    when = last.savedAt ? String(last.savedAt) : '';
+  }
+  const name = last.fileName || last.path || 'copy';
+  return when ? `${name} · ${when}` : name;
+}
+
+function kokoroStatusText(k) {
+  if (!k) return 'checking…';
+  if (k.ok) return 'Ready';
+  return 'Not downloaded';
+}
+
+function vocelloStatusText(v) {
+  if (!v) return 'checking…';
+  if (v.ok) return 'Ready';
+  if (!v.bin) return 'CLI missing';
+  return 'Not downloaded';
+}
+
+function setEngineError(engine, msg) {
+  const el = document.querySelector(`[data-error="${engine}"]`);
+  if (!el) return;
+  if (!msg) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function appendJobLog(engine, line) {
+  const box = document.querySelector(`[data-progress="${engine}"]`);
+  const logEl = document.querySelector(`[data-log="${engine}"]`);
+  if (box) box.classList.remove('hidden');
+  if (logEl && line) {
+    logEl.textContent += (logEl.textContent ? '\n' : '') + line;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+
+function resetJobLog(engine) {
+  const box = document.querySelector(`[data-progress="${engine}"]`);
+  const logEl = document.querySelector(`[data-log="${engine}"]`);
+  if (logEl) logEl.textContent = '';
+  if (box) box.classList.add('hidden');
+}
+
+function applyModels(models) {
+  if (!models) return;
+  const cache = document.querySelector('[data-cache-root]');
+  if (cache && models.cacheRoot) cache.textContent = models.cacheRoot;
+
+  const k = models.kokoro;
+  if (k) {
+    const status = document.querySelector('[data-status="kokoro"]');
+    if (status) status.textContent = kokoroStatusText(k);
+    const last = document.querySelector('[data-lastsave="kokoro"]');
+    if (last) last.textContent = formatSaved(k.lastSave);
+    const pathEl = document.querySelector('[data-path="kokoro"]');
+    if (pathEl) pathEl.textContent = k.dir ? `Cache: ${k.dir}` : '';
+    const size = document.querySelector('[data-size="kokoro"]');
+    if (size && k.sizeLabel) size.textContent = k.sizeLabel;
+  }
+  const v = models.vocello;
+  if (v) {
+    const status = document.querySelector('[data-status="vocello"]');
+    if (status) status.textContent = vocelloStatusText(v);
+    const last = document.querySelector('[data-lastsave="vocello"]');
+    if (last) last.textContent = formatSaved(v.lastSave);
+    const pathEl = document.querySelector('[data-path="vocello"]');
+    if (pathEl) {
+      pathEl.textContent = v.bin
+        ? `CLI: ${v.bin}${v.dir ? ` · ${v.dir}` : ''}`
+        : 'Install the Vocello CLI from GitHub releases, then download the model.';
+    }
+    const size = document.querySelector('[data-size="vocello"]');
+    if (size && v.sizeLabel) size.textContent = v.sizeLabel;
+  }
+}
+
+async function refreshModels() {
+  const models = await api('/api/models');
+  applyModels(models);
+  return models;
+}
+
+function openSettings() {
+  $('settingsOverlay').classList.remove('hidden');
+  setEngineError('kokoro', '');
+  setEngineError('vocello', '');
+  refreshModels().catch((e) => {
+    setEngineError('kokoro', e.message);
+    setEngineError('vocello', e.message);
+  });
+}
+
+function closeSettings() {
+  $('settingsOverlay').classList.add('hidden');
+}
+
+function togglePathField(engine, kind, show) {
+  const el = document.querySelector(`[data-pathfield="${engine}-${kind}"]`);
+  if (!el) return;
+  el.classList.toggle('hidden', !show);
+  if (show) {
+    const input = document.querySelector(`[data-input="${engine}-${kind}"]`);
+    if (input) input.focus();
+  }
+}
+
+function consumeSseBuffer(buffer, onEvent) {
+  const parts = buffer.split('\n\n');
+  const rest = parts.pop() || '';
+  for (const part of parts) {
+    const lines = part.split('\n');
+    let event = 'message';
+    let data = '';
+    for (const line of lines) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      if (line.startsWith('data:')) data += line.slice(5).trim();
+    }
+    if (!data) continue;
+    let payload;
+    try {
+      payload = JSON.parse(data);
+    } catch {
+      continue;
+    }
+    onEvent(event, payload);
+  }
+  return rest;
+}
+
+async function runModelSse(engine, path) {
+  setEngineError(engine, '');
+  resetJobLog(engine);
+  appendJobLog(engine, 'starting…');
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+  if (!res.ok || !res.body) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let errPayload = null;
+  let donePayload = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    buffer = consumeSseBuffer(buffer, (event, payload) => {
+      if (event === 'log' || event === 'progress') {
+        appendJobLog(engine, payload.line || '');
+      } else if (event === 'done') {
+        donePayload = payload;
+        if (payload.models) applyModels(payload.models);
+      } else if (event === 'error') {
+        errPayload = payload;
+      }
+    });
+  }
+  if (errPayload) {
+    const err = new Error(errPayload.message || 'job failed');
+    err.body = errPayload;
+    throw err;
+  }
+  return donePayload || { ok: true };
+}
+
+async function postModelPath(engine, action, pathValue) {
+  const body = await api(`/api/models/${engine}/${action}`, {
+    method: 'POST',
+    body: JSON.stringify({ path: pathValue }),
+  });
+  if (body.models) applyModels(body.models);
+  return body;
+}
+
+async function submitPathAction(engine, kind) {
+  const input = document.querySelector(`[data-input="${engine}-${kind}"]`);
+  const pathValue = (input?.value || '').trim();
+  if (!pathValue) {
+    setEngineError(engine, 'Enter an absolute folder path on this machine.');
+    return;
+  }
+  await postModelPath(engine, kind, pathValue);
+  togglePathField(engine, kind, false);
+}
+
+function wireSettings() {
+  $('settingsBtn').addEventListener('click', () => openSettings());
+  $('settingsClose').addEventListener('click', () => closeSettings());
+  $('settingsOverlay').addEventListener('click', (e) => {
+    if (e.target === $('settingsOverlay')) closeSettings();
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === '.') {
+      e.preventDefault();
+      if ($('settingsOverlay').classList.contains('hidden')) openSettings();
+      else closeSettings();
+      return;
+    }
+    if (e.key === 'Escape' && !$('settingsOverlay').classList.contains('hidden')) {
+      closeSettings();
+    }
+  });
+
+  document.querySelectorAll('[data-input]').forEach((input) => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const id = input.dataset.input || '';
+      const [engine, kind] = id.split('-');
+      submitPathAction(engine, kind).catch((err) => {
+        const hint = err.body?.hint ? `\n${err.body.hint}` : '';
+        setEngineError(engine, (err.message || 'failed') + hint);
+      });
+    });
+  });
+
+  document.querySelectorAll('[data-act]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const act = btn.dataset.act;
+      const engine = act.startsWith('vocello') ? 'vocello' : 'kokoro';
+      btn.disabled = true;
+      try {
+        if (act === 'kokoro-download' || act === 'vocello-download') {
+          await runModelSse(engine, `/api/models/${engine}/setup`);
+          return;
+        }
+        if (act === 'kokoro-clear') {
+          const body = await api('/api/models/kokoro/clear', { method: 'POST', body: '{}' });
+          if (body.models) applyModels(body.models);
+          return;
+        }
+        if (act === 'vocello-clear') {
+          await runModelSse('vocello', '/api/models/vocello/clear');
+          return;
+        }
+        if (act.endsWith('-export') && !act.endsWith('-export-go')) {
+          togglePathField(engine, 'export', true);
+          return;
+        }
+        if (act.endsWith('-import') && !act.endsWith('-import-go')) {
+          togglePathField(engine, 'import', true);
+          return;
+        }
+        if (act.endsWith('-export-go') || act.endsWith('-import-go')) {
+          const kind = act.includes('export') ? 'export' : 'import';
+          await submitPathAction(engine, kind);
+        }
+      } catch (e) {
+        const hint = e.body?.hint ? `\n${e.body.hint}` : '';
+        setEngineError(engine, (e.message || 'failed') + hint);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+wireSettings();
+
 refreshMeta()
   .then(refreshProjects)
   .catch((e) => {
