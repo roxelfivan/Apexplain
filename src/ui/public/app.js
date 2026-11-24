@@ -13,15 +13,68 @@ function slugify(input) {
   return s;
 }
 
+const DESKTOP_MQ = window.matchMedia('(min-width: 768px)');
+const TRASH_ICON =
+  '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m1 0-.9 14H8.9L8 6m-3 0 1 14h12l1-14"/></svg>';
+
+function isDesktop() {
+  return DESKTOP_MQ.matches;
+}
+
+function setNavOpen(open) {
+  const sidebar = $('sidebar');
+  const backdrop = $('backdrop');
+  const toggle = $('navToggle');
+  const shouldOpen = !!open && !isDesktop();
+  document.body.classList.toggle('nav-open', shouldOpen);
+  sidebar.classList.toggle('open', shouldOpen);
+  if (backdrop) backdrop.hidden = !shouldOpen;
+  toggle.setAttribute('aria-expanded', String(shouldOpen));
+  toggle.setAttribute('aria-label', shouldOpen ? 'Close projects menu' : 'Open projects menu');
+}
+
+function closeNav() {
+  setNavOpen(false);
+}
+
+function routeFor(name) {
+  return name ? `#/p/${encodeURIComponent(name)}` : '#/';
+}
+
+function projectFromHash() {
+  const m = location.hash.match(/^#\/p\/([^/?]+)$/);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
+}
+
+function syncHash(name) {
+  const next = routeFor(name);
+  if (location.hash === next) return;
+  if (!name && (!location.hash || location.hash === '#')) return;
+  history.pushState({ project: name || null }, '', next);
+}
+
 function showCreateError(msg) {
   const el = $('createError');
+  const title = $('newTitle');
+  const folder = $('newName');
   if (!msg) {
     el.classList.add('hidden');
     el.textContent = '';
+    title.removeAttribute('aria-invalid');
+    folder.removeAttribute('aria-invalid');
     return;
   }
   el.textContent = msg;
   el.classList.remove('hidden');
+  const folderIssue = /folder name/i.test(msg);
+  title.setAttribute('aria-invalid', folderIssue ? 'false' : 'true');
+  folder.setAttribute('aria-invalid', 'true');
+  el.focus();
 }
 
 function setOutputStatus(text, cls = '') {
@@ -81,9 +134,18 @@ async function api(path, opts = {}) {
   return body;
 }
 
+function setLlmStatusLine(llm) {
+  const el = $('llmStatus');
+  if (!el || !llm) return;
+  const ready = llm.ready?.ok;
+  const name = llm.label || llm.provider || 'LLM';
+  el.textContent = ready ? `LLM: ${name}` : `LLM: ${name} (not ready)`;
+}
+
 async function refreshMeta() {
   const meta = await api('/api/meta');
   $('version').textContent = `v${meta.version}`;
+  setLlmStatusLine(meta.llm);
 }
 
 async function refreshProjects() {
@@ -115,7 +177,7 @@ async function refreshProjects() {
     del.className = 'project-delete';
     del.title = `Remove ${p.name}`;
     del.setAttribute('aria-label', `Remove ${p.name}`);
-    del.textContent = '×';
+    del.innerHTML = TRASH_ICON;
     del.addEventListener('click', (e) => {
       e.stopPropagation();
       removeProject(p.name);
@@ -135,12 +197,7 @@ async function removeProject(name) {
   try {
     await api(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
     if (current === name) {
-      current = null;
-      $('editor').classList.add('hidden');
-      $('empty').classList.remove('hidden');
-      refreshPlayer(false);
-      clearLog();
-      setOutputStatus('idle');
+      showEmpty({ fromHash: false });
     }
     await refreshProjects();
   } catch (e) {
@@ -156,21 +213,42 @@ function escapeHtml(s) {
     .replaceAll('"', '&quot;');
 }
 
-function setTab(name) {
-  document.querySelectorAll('.tab').forEach((t) => {
-    t.classList.toggle('active', t.dataset.tab === name);
+function setTab(name, { focus = false } = {}) {
+  const tabs = [...document.querySelectorAll('.tab')];
+  let active = null;
+  tabs.forEach((t) => {
+    const on = t.dataset.tab === name;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    if (on) active = t;
   });
   document.querySelectorAll('.tab-panel').forEach((p) => {
-    p.classList.toggle('active', p.dataset.panel === name);
+    const on = p.dataset.panel === name;
+    p.classList.toggle('active', on);
+    p.hidden = !on;
   });
+  if (focus && active) active.focus();
 }
 
-async function openProject(name) {
+function showEmpty({ fromHash = false } = {}) {
+  current = null;
+  $('editor').classList.add('hidden');
+  $('empty').classList.remove('hidden');
+  refreshPlayer(false);
+  clearLog();
+  setOutputStatus('idle');
+  if (!fromHash) syncHash(null);
+}
+
+async function openProject(name, { fromHash = false } = {}) {
   current = name;
   const data = await api(`/api/projects/${encodeURIComponent(name)}/files`);
   $('empty').classList.add('hidden');
   $('editor').classList.remove('hidden');
   $('projectTitle').textContent = name;
+  closeNav();
+  if (!fromHash) syncHash(name);
   let lang = 'en';
   try {
     lang = JSON.parse(data.video).lang || 'en';
@@ -222,8 +300,10 @@ async function createProject() {
     });
     $('newName').value = '';
     $('newTitle').value = '';
+    $('newName').placeholder = 'auto from title (a-z, 0-9, -)';
     await refreshProjects();
     await openProject(name);
+    closeNav();
   } catch (e) {
     const hint = e.body?.hint ? ` ${e.body.hint}` : '';
     showCreateError((e.message || 'Create failed') + hint);
@@ -258,7 +338,7 @@ async function autogenerate() {
   clearLog();
   setOutputStatus('generating…', 'busy');
   revealOutput();
-  log('Autogenerating a topic-shaped ~1 min script (Wikipedia when online)…');
+  log('Autogenerating via Settings LLM (local Gemma or MiniMax)…');
   try {
     let video;
     try {
@@ -279,7 +359,7 @@ async function autogenerate() {
     const src =
       data.source && data.source !== 'fallback'
         ? ` from ${data.source}`
-        : ' (topic stub — offline or no Wikipedia hit)';
+        : ' (stub — APEXPLAIN_LLM=mock)';
     const subj = data.subject ? ` about “${data.subject}”` : '';
     const shape =
       Array.isArray(data.outline) && data.outline.length
@@ -290,7 +370,8 @@ async function autogenerate() {
     revealOutput();
   } catch (e) {
     setOutputStatus('error', 'err');
-    log(e.message || 'generate failed', 'err');
+    const hint = e.body?.hint ? `\n${e.body.hint}` : '';
+    log((e.message || 'generate failed') + hint, 'err');
     revealOutput();
   }
 }
@@ -410,8 +491,21 @@ function runMakeStream({ dryRun }) {
   });
 }
 
-document.querySelectorAll('.tab').forEach((tab) => {
+const tabs = [...document.querySelectorAll('.tab')];
+tabs.forEach((tab) => {
   tab.addEventListener('click', () => setTab(tab.dataset.tab));
+  tab.addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(tab);
+    if (i < 0) return;
+    let next = i;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    else return;
+    e.preventDefault();
+    setTab(tabs[next].dataset.tab, { focus: true });
+  });
 });
 
 $('newTitle').addEventListener('input', () => {
@@ -420,11 +514,269 @@ $('newTitle').addEventListener('input', () => {
   }
 });
 
+let settingsCache = null;
+let settingsClearKey = false;
+let settingsLastFocus = null;
+
+function showSettingsError(msg) {
+  const el = $('settingsError');
+  if (!msg) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function fillModelList(presets) {
+  const list = $('llmModelList');
+  list.innerHTML = '';
+  for (const m of presets || []) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    list.appendChild(opt);
+  }
+}
+
+function applyProviderUi(providerId) {
+  const preset = (settingsCache?.providers || []).find((p) => p.id === providerId);
+  $('llmHelp').textContent = preset?.helpText || '';
+  const gemma = providerId === 'local-gemma';
+  $('gemmaFields').classList.toggle('hidden', !gemma);
+  $('minimaxFields').classList.toggle('hidden', gemma);
+  if (preset) {
+    if (gemma) {
+      $('llmEndpoint').value = preset.defaultEndpoint;
+      $('llmModel').value = preset.defaultModel;
+    } else {
+      fillModelList(preset.modelPresets);
+      if (!$('llmEndpoint').value) $('llmEndpoint').value = preset.defaultEndpoint;
+      if (!$('llmModel').value) $('llmModel').value = preset.defaultModel;
+    }
+  }
+  const g = settingsCache?.gemma;
+  if (g) {
+    $('gemmaStatus').textContent = g.ok
+      ? `Status: Ready — ${g.detail}`
+      : `Status: Not downloaded — ${g.detail}`;
+    $('gemmaDownload').disabled = !!g.ok;
+  }
+}
+
+async function openSettings() {
+  showSettingsError('');
+  settingsClearKey = false;
+  const data = await api('/api/settings');
+  settingsCache = data;
+  const sel = $('llmProvider');
+  sel.innerHTML = '';
+  for (const p of data.providers) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  }
+  sel.value = data.provider;
+  $('llmEndpoint').value = data.apiEndpoint || '';
+  $('llmModel').value = data.model || '';
+  $('llmApiKey').value = '';
+  $('llmApiKey').placeholder = data.apiKeySet
+    ? `Saved key ${data.apiKeyHint} — paste to replace`
+    : data.apiKeyPlaceholder || 'Paste your Minimax API key…';
+  $('llmApiKey').type = 'password';
+  $('llmShowKey').textContent = 'Show';
+  applyProviderUi(data.provider);
+  settingsLastFocus = document.activeElement;
+  setEngineError('kokoro', '');
+  setEngineError('vocello', '');
+  refreshModels().catch((e) => {
+    setEngineError('kokoro', e.message);
+    setEngineError('vocello', e.message);
+  });
+  $('settingsModal').classList.remove('hidden');
+  $('settingsClose').focus();
+}
+
+function closeSettings() {
+  $('settingsModal').classList.add('hidden');
+  if (settingsLastFocus && typeof settingsLastFocus.focus === 'function') {
+    settingsLastFocus.focus();
+  }
+}
+
+async function saveSettings() {
+  showSettingsError('');
+  try {
+    const provider = $('llmProvider').value;
+    const body = {
+      provider,
+      apiEndpoint: $('llmEndpoint').value,
+      model: $('llmModel').value,
+    };
+    const typed = $('llmApiKey').value.trim();
+    if (settingsClearKey) body.clearApiKey = true;
+    else if (typed) body.apiKey = typed;
+    const data = await api('/api/settings', { method: 'PUT', body: JSON.stringify(body) });
+    settingsCache = { ...settingsCache, ...data };
+    setLlmStatusLine(data);
+    closeSettings();
+  } catch (e) {
+    showSettingsError(e.message || 'Save failed');
+  }
+}
+
+async function downloadGemma() {
+  showSettingsError('');
+  const logEl = $('gemmaLog');
+  logEl.classList.remove('hidden');
+  logEl.textContent = '';
+  $('gemmaDownload').disabled = true;
+  $('gemmaStatus').textContent = 'Status: Downloading… (~2 GB, this can take a while)';
+  try {
+    const res = await fetch('/api/settings/gemma/download', { method: 'POST' });
+    if (!res.ok || !res.body) throw new Error(await res.text());
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let errPayload = null;
+    let donePayload = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+      for (const part of parts) {
+        let event = 'message';
+        let data = '';
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event:')) event = line.slice(6).trim();
+          if (line.startsWith('data:')) data += line.slice(5).trim();
+        }
+        if (!data) continue;
+        let payload;
+        try {
+          payload = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        if (event === 'log' && payload.line) {
+          logEl.textContent += payload.line + '\n';
+          logEl.scrollTop = logEl.scrollHeight;
+        } else if (event === 'error') errPayload = payload;
+        else if (event === 'done') donePayload = payload;
+      }
+    }
+    if (errPayload) throw new Error(errPayload.message || 'Download failed');
+    if (settingsCache) settingsCache.gemma = donePayload?.gemma || settingsCache.gemma;
+    $('gemmaStatus').textContent = donePayload?.gemma?.ok
+      ? `Status: Ready — ${donePayload.gemma.detail}`
+      : 'Status: Download finished';
+    await refreshMeta();
+  } catch (e) {
+    showSettingsError(e.message || 'Download failed');
+    $('gemmaDownload').disabled = false;
+  }
+}
+
 $('createBtn').addEventListener('click', () => createProject());
 $('saveBtn').addEventListener('click', () => saveProject().catch((e) => log(e.message, 'err')));
 $('generateBtn').addEventListener('click', () => autogenerate());
 $('dryBtn').addEventListener('click', () => runMake({ dryRun: true }));
 $('makeBtn').addEventListener('click', () => runMake({ dryRun: false }));
+$('settingsBtn').addEventListener('click', () => openSettings().catch((e) => window.alert(e.message)));
+$('settingsClose').addEventListener('click', () => closeSettings());
+$('settingsCancel').addEventListener('click', () => closeSettings());
+$('settingsSave').addEventListener('click', () => saveSettings());
+$('llmProvider').addEventListener('change', (e) => {
+  const id = e.target.value;
+  const preset = (settingsCache?.providers || []).find((p) => p.id === id);
+  if (preset) {
+    $('llmEndpoint').value = preset.defaultEndpoint;
+    $('llmModel').value = preset.defaultModel;
+    $('llmApiKey').placeholder = preset.apiKeyPlaceholder || '';
+    fillModelList(preset.modelPresets);
+  }
+  applyProviderUi(id);
+});
+$('llmShowKey').addEventListener('click', () => {
+  const input = $('llmApiKey');
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  $('llmShowKey').textContent = show ? 'Hide' : 'Show';
+});
+$('llmClearKey').addEventListener('click', () => {
+  settingsClearKey = true;
+  $('llmApiKey').value = '';
+  $('llmApiKey').placeholder = 'Key will be cleared on Save';
+});
+$('gemmaDownload').addEventListener('click', () => downloadGemma());
+$('settingsModal').addEventListener('click', (e) => {
+  if (e.target === $('settingsModal')) closeSettings();
+});
+$('navToggle').addEventListener('click', () => {
+  setNavOpen(!document.body.classList.contains('nav-open'));
+});
+$('backdrop').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  closeNav();
+});
+$('emptyOpenNav').addEventListener('click', () => {
+  setNavOpen(true);
+  $('newTitle').focus();
+});
+DESKTOP_MQ.addEventListener('change', () => {
+  if (isDesktop()) closeNav();
+});
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === '.') {
+    e.preventDefault();
+    if ($('settingsModal').classList.contains('hidden')) {
+      openSettings().catch((err) => window.alert(err.message));
+    } else {
+      closeSettings();
+    }
+    return;
+  }
+  if (e.key !== 'Escape') return;
+  if (!$('settingsModal').classList.contains('hidden')) {
+    closeSettings();
+    return;
+  }
+  closeNav();
+});
+$('settingsModal').addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' || $('settingsModal').classList.contains('hidden')) return;
+  const nodes = [...$('settingsModal').querySelectorAll('button, [href], input, select, textarea')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+});
+
+function applyRoute() {
+  const name = projectFromHash();
+  if (name && name !== current) {
+    openProject(name, { fromHash: true }).catch((e) => {
+      showEmpty({ fromHash: true });
+      log(e.message || 'Could not open project', 'err');
+    });
+  } else if (!name && current) {
+    showEmpty({ fromHash: true });
+  }
+}
+
+window.addEventListener('popstate', applyRoute);
+window.addEventListener('hashchange', applyRoute);
 
 function formatSaved(last) {
   if (!last) return 'Not saved to disk yet.';
@@ -522,20 +874,6 @@ async function refreshModels() {
   return models;
 }
 
-function openSettings() {
-  $('settingsOverlay').classList.remove('hidden');
-  setEngineError('kokoro', '');
-  setEngineError('vocello', '');
-  refreshModels().catch((e) => {
-    setEngineError('kokoro', e.message);
-    setEngineError('vocello', e.message);
-  });
-}
-
-function closeSettings() {
-  $('settingsOverlay').classList.add('hidden');
-}
-
 function togglePathField(engine, kind, show) {
   const el = document.querySelector(`[data-pathfield="${engine}-${kind}"]`);
   if (!el) return;
@@ -626,24 +964,7 @@ async function submitPathAction(engine, kind) {
   togglePathField(engine, kind, false);
 }
 
-function wireSettings() {
-  $('settingsBtn').addEventListener('click', () => openSettings());
-  $('settingsClose').addEventListener('click', () => closeSettings());
-  $('settingsOverlay').addEventListener('click', (e) => {
-    if (e.target === $('settingsOverlay')) closeSettings();
-  });
-  document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === '.') {
-      e.preventDefault();
-      if ($('settingsOverlay').classList.contains('hidden')) openSettings();
-      else closeSettings();
-      return;
-    }
-    if (e.key === 'Escape' && !$('settingsOverlay').classList.contains('hidden')) {
-      closeSettings();
-    }
-  });
-
+function wireTtsSettings() {
   document.querySelectorAll('[data-input]').forEach((input) => {
     input.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
@@ -698,10 +1019,11 @@ function wireSettings() {
   });
 }
 
-wireSettings();
+wireTtsSettings();
 
 refreshMeta()
   .then(refreshProjects)
+  .then(() => applyRoute())
   .catch((e) => {
     $('version').textContent = e.message;
   });

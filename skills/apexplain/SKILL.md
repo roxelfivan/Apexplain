@@ -45,7 +45,7 @@ In a checkout: `node bin/apexplain.js …`.
 
 `cue:"sentence"` reveals item *i* when sentence *i* starts. Optional per-item `at` or `marker`.
 
-Autogenerate picks layouts like explainroo `docs pictures`: **order→steps**, **comparison→compare**, **parts of a whole (hub)→cards**, **cause→flow**, **one big number→title**.
+Autogenerate uses the UI **Settings** LLM (local Gemma ~2 GB, or MiniMax API key — same choice as [apeditor](https://github.com/roxelfivan/apeditor)). It still picks layouts like explainroo `docs pictures`: **order→steps**, **comparison→compare**, **parts of a whole (hub)→cards**, **cause→flow**, **one big number→title**.
 
 ## Script rules
 

@@ -1,25 +1,32 @@
-# Settings — TTS models
+# Settings
 
-Apexplain does **not** ship full-size TTS or LLM weights in git. A clone is tiny. Weights are fetched **only when you ask**, independently for English and zh-HK.
+Apexplain does **not** ship full-size TTS or LLM weights in git. A clone is tiny. Weights and API keys are fetched or stored **only when you ask**.
 
-The same actions exist in the local UI (**Settings** gear) and on the CLI.
+Open **Settings** (gear in the top bar, or `Ctrl+.`). Project fields (`title`, `lang`, `size`, `voice`) stay in the **Project** tab (`video.json`).
 
-## Engines
+## Autogenerate LLM
+
+Same provider choice as [apeditor](https://github.com/roxelfivan/apeditor):
+
+| Provider | What it is | Size / secret |
+|----------|------------|---------------|
+| **Local Gemma** | Gemma 2 2B Instruct ONNX on this machine | ~2 GB; `npm run setup:gemma` or **Download from Hugging Face** |
+| **Minimax** | Chat Completions HTTPS | API key in `~/.config/apexplain/llm.json` (mode 0600) |
+
+`APEXPLAIN_LLM=mock` keeps stub Autogenerate for tests. Save in Settings stores the provider (and MiniMax key if you pasted one).
+
+## TTS engines (on demand)
+
+English and zh-HK are independent: install either, both, or neither. `make` stays local after setup.
 
 | Engine | Source | Size | Runtime cache | CLI |
 |--------|--------|------|---------------|-----|
 | **Kokoro-82M** (English) | [Hugging Face](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) (`q8`) | ~88 MB | `~/.cache/apexplain/models/…` | `npm run setup:kokoro` |
 | **Vocello** `pro_design_speed` (zh-HK) | [Vocello releases](https://github.com/PowerBeef/Vocello/releases) CLI | ~2.23 GB | `~/Library/Application Support/QwenVoice/models/` | `npm run setup:vocello` |
 
-Install **either, both, or neither**. `make` stays local after setup (`APEXPLAIN_ALLOW_HF=1` is only for the Kokoro download step).
-
 `npm install` does **not** download those weights. (kokoro-js ships small voice `.bin` files in `node_modules`; that is not the ONNX model.)
 
-## UI (apeeditor-style model cards)
-
-Open **Settings** (gear next to the Apexplain title). Project fields (`title`, `lang`, `size`, `voice`) stay in the **video.json / Project** tab.
-
-Each card:
+### TTS cards
 
 | Control | Kokoro | Vocello |
 |---------|--------|---------|
@@ -38,8 +45,10 @@ Load/save use **absolute paths on this machine** (localhost Node UI). The browse
 
 | Variable | Effect |
 |----------|--------|
-| `APEXPLAIN_CACHE` | Override Kokoro cache root (default `~/.cache/apexplain`) |
-| `APEXPLAIN_ALLOW_HF=1` | Allow Hugging Face during Kokoro load (setup / Settings download) |
+| `APEXPLAIN_CACHE` | Override Kokoro/Gemma cache root (default `~/.cache/apexplain`) |
+| `APEXPLAIN_ALLOW_HF=1` | Allow Hugging Face during Kokoro/Gemma load (setup / Settings download) |
+| `APEXPLAIN_LLM=mock` | Stub Autogenerate (tests) |
+| `APEXPLAIN_MINIMAX_API_KEY` | Override the MiniMax key in `llm.json` |
 | `APEXPLAIN_VOCELLO` | Path to the Vocello binary |
 | `APEXPLAIN_VOCELLO_MODELS` | Override Vocello models directory |
-| `APEXPLAIN_TTS=mock` | Skip real weights (tests) |
+| `APEXPLAIN_TTS=mock` | Skip real TTS weights (tests) |

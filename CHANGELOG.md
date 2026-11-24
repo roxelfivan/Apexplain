@@ -3,11 +3,16 @@
 ## 0.0.4 — 2026-11-24
 
 ### Added
-- UI **Settings** (gear): on-demand Kokoro (Hugging Face) and/or Vocello download, Save to Disk, Load from a local copy
-- [docs/settings.md](docs/settings.md) — models are **not** in git; clone stays small
+- UI **Settings** (gear): **Local Gemma** or **MiniMax** for Autogenerate, plus on-demand **Kokoro** / **Vocello** TTS download, Save to Disk, Load from a local copy
+- [docs/settings.md](docs/settings.md) — LLM + TTS weights are **not** in git; clone stays small
+- Autogenerate is an LLM step: Gemma on-device or MiniMax Chat Completions; JSON `{ script, scenes }` validated against Apexplain schema
+- `npm run setup:gemma`; settings file `~/.config/apexplain/llm.json` (0600)
 
 ### Changed
-- README / skill / doctor docs: English vs zh-HK installs are independent; `video.json` tab labeled Project
+- Local web UI is mobile-first: project drawer, sticky Make/Save bar, larger tap targets, visible focus, and Settings as a phone sheet
+- Autogenerate no longer writes scripts from Wikipedia (outline intent is unchanged; copy comes from the Settings LLM)
+- `APEXPLAIN_LLM=mock` keeps stub Autogenerate for tests
+- README / skill: English vs zh-HK TTS installs are independent; `video.json` tab labeled Project
 
 ## 0.0.3 — 2026-11-24
 
