@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.0.6 — 2026-11-24
+
+### Added
+- **Clipart** registry for mechanism glyphs (`db`, `funnel`, `nodes`, `stack`, …) alongside Lucide `icon` accents
+- **Layouts**: `stat`, `chart` (bar/line/pie), `timeline`, `quote`, `funnel` — plus richer `steps` / `cards` / `flow` / `compare`
+- **Motion** on scenes and `video.json`: SoftIn fade/slide, stagger, draw-on, count-up (`src/motion.js`)
+- **`targetSeconds`** (15–600) in templates, Project UI, CLI `--target-seconds`, and Autogenerate length budgeting
+- Autogenerate scales middle-beat count and per-beat `minSentences` / `minWords` from target length; skill-driven system prompt
+- Charts demo example (`examples/charts-demo`)
+
+### Changed
+- Autogenerate picks layout by beat content (`layoutHints` + skill decision table), not cards-by-default / round-robin
+- Local Gemma / MiniMax output token budgets scale with `targetSeconds` so longer scripts are not truncated
+- Project **Target length** box is the Autogenerate source of truth (carried from Create into the Project tab)
+- Lucide icon allowlist expanded (~200 names) with aliases for common model synonyms (`train`→`train-front`, `route`, travel/food/money icons, …)
+- Dense item layouts: strip per-item clipart when lists are long; flow/timeline shrink or stack to stay in the safe area
+- Skill + docs: size speech to `targetSeconds`, always emit per-scene `motion`, prefer clipart for mechanisms
+
+### Fixed
+- Stale `"targetSeconds": "{{targetSeconds}}"` leftovers leaving the Target length field empty
+- Make failures on unknown Autogenerate icons (e.g. `route`) and overflow from dense flow/timeline scenes with item clipart
+
 ## 0.0.5 — 2026-11-24
 
 ### Added

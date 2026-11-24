@@ -96,7 +96,20 @@
               <option value="9:16">9:16</option>
             </select>
           </label>
-          <p id="createHint" class="hint">Tip: folder name cannot have spaces. Leave blank to auto-fill.</p>
+          <label for="newTargetSeconds"
+            >Target length (seconds)
+            <input
+              id="newTargetSeconds"
+              type="number"
+              min="15"
+              max="600"
+              step="5"
+              value="60"
+              inputmode="numeric"
+              autocomplete="off"
+            />
+          </label>
+          <p id="createHint" class="hint">Tip: folder name cannot have spaces. Leave blank to auto-fill. Target length guides Autogenerate + dry-run estimates.</p>
           <button id="createBtn" type="button" class="primary">Create</button>
           <p id="createError" class="err banner hidden" role="alert" tabindex="-1"></p>
         </section>
@@ -153,7 +166,27 @@
 
           <div class="panes">
             <div class="pane tab-panel active" role="tabpanel" id="panel-video" data-panel="video" aria-labelledby="tab-video">
-              <label for="videoEditor">Project (title, lang, size, voice…)</label>
+              <div class="project-fields">
+                <label for="targetSeconds"
+                  >Target length (seconds)
+                  <input
+                    id="targetSeconds"
+                    type="number"
+                    min="15"
+                    max="600"
+                    step="5"
+                    value="60"
+                    placeholder="e.g. 60"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    aria-describedby="targetSecondsHint"
+                  />
+                </label>
+                <p id="targetSecondsHint" class="hint">
+                  Set when you create the project. Autogenerate uses this box for script length; dry-run compares against it.
+                </p>
+              </div>
+              <label for="videoEditor">Project JSON (title, lang, size, voice, targetSeconds…)</label>
               <textarea id="videoEditor" spellcheck="false" autocomplete="off"></textarea>
             </div>
             <div class="pane tab-panel" role="tabpanel" id="panel-storyboard" data-panel="storyboard" aria-labelledby="tab-storyboard" hidden>

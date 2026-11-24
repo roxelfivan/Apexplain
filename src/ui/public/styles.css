@@ -599,6 +599,23 @@ button:disabled {
   line-height: 1.4;
 }
 
+.project-fields {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  max-width: 18rem;
+}
+
+.project-fields input[type='number'] {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  background: var(--panel, #0f172a);
+  color: inherit;
+  font: inherit;
+}
+
 .banner {
   margin: 0.5rem 0 0;
   padding: 0.55rem 0.7rem;

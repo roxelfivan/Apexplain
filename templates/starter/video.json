@@ -6,7 +6,16 @@
   "voice": "af_heart",
   "fps": 30,
   "lead": 0.4,
-  "hold": 0.6,
+  "hold": 1.0,
   "end": 1.0,
-  "captions": "auto"
+  "targetSeconds": "{{targetSeconds}}",
+  "captions": "auto",
+  "motion": {
+    "enabled": true,
+    "fade": 0.4,
+    "slidePx": 14,
+    "drawOn": 0.45,
+    "countUp": 0.75,
+    "stagger": 0
+  }
 }

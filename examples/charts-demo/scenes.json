@@ -1,0 +1,71 @@
+{
+  "hook": {
+    "layout": "title",
+    "title": "Why caches matter",
+    "subtitle": "Keep hot answers close",
+    "clipart": "stack"
+  },
+  "latency": {
+    "layout": "stat",
+    "value": "~2 ms",
+    "unit": "cache hit",
+    "caption": "Local answer vs a full database trip",
+    "clipart": "db",
+    "motion": {
+      "countUp": 1.0,
+      "fade": 0.5
+    }
+  },
+  "compare": {
+    "layout": "compare",
+    "cue": "sentence",
+    "left": {
+      "title": "Cold path",
+      "text": "Every request hits the database",
+      "clipart": "server",
+      "marker": "cold"
+    },
+    "right": {
+      "title": "Hot path",
+      "text": "Repeats reuse a nearby copy",
+      "clipart": "stack",
+      "marker": "hot"
+    }
+  },
+  "mix": {
+    "layout": "chart",
+    "kind": "bar",
+    "title": "Relative cost per request",
+    "cue": "sentence",
+    "highlight": 0,
+    "series": [
+      { "label": "Hit", "value": 1, "marker": "hits" },
+      { "label": "Miss", "value": 12, "marker": "miss" },
+      { "label": "Avg", "value": 3, "marker": "ratio" }
+    ],
+    "motion": {
+      "drawOn": 0.6,
+      "stagger": 0.08
+    }
+  },
+  "path": {
+    "layout": "flow",
+    "cue": "sentence",
+    "items": [
+      { "clipart": "magnifier", "text": "Ask cache", "marker": "ask" },
+      { "clipart": "stack", "text": "Serve hit", "marker": "serve" },
+      { "clipart": "db", "text": "Fetch miss", "marker": "fetch" }
+    ],
+    "motion": {
+      "fade": 0.35,
+      "drawOn": 0.4,
+      "stagger": 0.05
+    }
+  },
+  "close": {
+    "layout": "title",
+    "title": "Hot data, nearby",
+    "subtitle": "Most traffic never wakes the database",
+    "clipart": "shield-block"
+  }
+}

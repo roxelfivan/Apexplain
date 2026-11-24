@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ApexError } from './errors.js';
+import { resolveMotion, validateMotion } from './motion.js';
 import { projectPaths } from './paths.js';
 import { parseScript } from './script.js';
 import { crossCheck, validateScenes } from './scenes.js';
@@ -66,6 +67,20 @@ function validateVideo(video) {
       rule: 'enum',
     });
   }
+  validateMotion(video.motion, 'video.json/motion');
+  let targetSeconds = null;
+  if (video.targetSeconds !== undefined && video.targetSeconds !== null && video.targetSeconds !== '') {
+    const n = Number(video.targetSeconds);
+    if (!Number.isFinite(n) || n < 15 || n > 600) {
+      throw new ApexError(`targetSeconds must be a number from 15 to 600`, {
+        code: 'bad_video',
+        path: 'video.json/targetSeconds',
+        rule: 'range',
+        hint: 'Pick a rough finished length in seconds (e.g. 45, 60, 90).',
+      });
+    }
+    targetSeconds = Math.round(n);
+  }
   const lang = video.lang || 'en';
   const defaultVoice = lang === 'zh-HK' ? 'vocello' : 'af_heart';
   return {
@@ -76,14 +91,17 @@ function validateVideo(video) {
     voice: video.voice || defaultVoice,
     fps: Number.isFinite(video.fps) ? video.fps : 30,
     lead: Number.isFinite(video.lead) ? video.lead : 0.4,
-    hold: Number.isFinite(video.hold) ? video.hold : 0.6,
+    // ~1s settle after last cue / voice (Phase 2 “落位停留”)
+    hold: Number.isFinite(video.hold) ? video.hold : 1.0,
     end: Number.isFinite(video.end) ? video.end : 1.0,
     speed: Number.isFinite(video.speed) ? video.speed : 1,
     pace: Number.isFinite(video.pace) ? video.pace : 1,
     sentenceGap: Number.isFinite(video.sentenceGap) ? video.sentenceGap : 0.3,
     paragraphGap: Number.isFinite(video.paragraphGap) ? video.paragraphGap : 0.55,
-    targetSeconds: Number.isFinite(video.targetSeconds) ? video.targetSeconds : null,
+    targetSeconds,
     captions: video.captions ?? 'auto',
+    /** Resolved motion defaults (video.json/motion merged onto built-ins). */
+    motion: resolveMotion(video.motion),
     raw: video,
   };
 }

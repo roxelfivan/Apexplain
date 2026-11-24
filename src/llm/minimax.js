@@ -10,7 +10,7 @@ function chatUrl(endpoint) {
   return `${base}/chat/completions`;
 }
 
-export async function completeMinimax(messages, settings, { log = () => {}, signal } = {}) {
+export async function completeMinimax(messages, settings, { log = () => {}, signal, maxTokens } = {}) {
   const key = settings?.apiKey?.trim();
   if (!key) {
     throw new ApexError('Minimax API key is missing', {
@@ -22,7 +22,8 @@ export async function completeMinimax(messages, settings, { log = () => {}, sign
   }
   const url = chatUrl(settings.apiEndpoint);
   const model = settings.model || getLlmProvider('minimax').defaultModel;
-  log(`llm: MiniMax ${model}`);
+  const tokens = Math.max(2048, Math.min(16384, Number(maxTokens) || 4096));
+  log(`llm: MiniMax ${model} (max_tokens=${tokens})`);
   let res;
   try {
     res = await fetch(url, {
@@ -35,9 +36,9 @@ export async function completeMinimax(messages, settings, { log = () => {}, sign
         model,
         messages,
         temperature: 0.4,
-        max_tokens: 4096,
+        max_tokens: tokens,
       }),
-      signal: signal || AbortSignal.timeout(120000),
+      signal: signal || AbortSignal.timeout(180000),
     });
   } catch (e) {
     throw new ApexError(`Minimax request failed: ${e.message}`, {

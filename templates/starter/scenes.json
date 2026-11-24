@@ -11,7 +11,10 @@
       { "icon": "lightbulb", "text": "First idea" },
       { "icon": "list", "text": "Second idea" },
       { "icon": "check", "text": "Third idea" }
-    ]
+    ],
+    "motion": {
+      "stagger": 0.06
+    }
   },
   "outro": {
     "layout": "title",

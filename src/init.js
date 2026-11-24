@@ -14,13 +14,26 @@ function fill(template, vars) {
 /**
  * Create a new Apexplain project directory from the starter template.
  * @param {string} dir
- * @param {{ title?: string, size?: string, theme?: string, lang?: string }} opts
+ * @param {{ title?: string, size?: string, theme?: string, lang?: string, targetSeconds?: number }} opts
  */
 export function initProject(dir, opts = {}) {
   const title = opts.title?.trim() || path.basename(path.resolve(dir)).replace(/[-_]/g, ' ') || 'Untitled';
   const size = opts.size || '16:9';
   const theme = opts.theme || 'studio';
   const lang = opts.lang || 'en';
+  let targetSeconds = 60;
+  if (opts.targetSeconds !== undefined && opts.targetSeconds !== null && opts.targetSeconds !== '') {
+    const n = Number(opts.targetSeconds);
+    if (!Number.isFinite(n) || n < 15 || n > 600) {
+      throw new ApexError(`targetSeconds must be a number from 15 to 600`, {
+        code: 'bad_flag',
+        path: '--target-seconds',
+        rule: 'range',
+        hint: 'Pick a rough finished length in seconds (e.g. 45, 60, 90).',
+      });
+    }
+    targetSeconds = Math.round(n);
+  }
 
   if (!SIZES.has(size)) {
     throw new ApexError(`size must be 16:9 or 9:16, not "${size}"`, {
@@ -64,13 +77,21 @@ export function initProject(dir, opts = {}) {
   }
 
   fs.mkdirSync(paths.root, { recursive: true });
-  const vars = { title, size, theme, lang };
+  const vars = { title, size, theme, lang, targetSeconds: String(targetSeconds) };
 
   for (const name of ['video.json', 'script.md', 'scenes.json', 'storyboard.md']) {
     const srcPath = path.join(templateDir, name);
     if (!fs.existsSync(srcPath)) continue;
     const src = fs.readFileSync(srcPath, 'utf8');
-    fs.writeFileSync(path.join(paths.root, name), fill(src, vars));
+    let out = fill(src, vars);
+    if (name === 'video.json') {
+      // Coerce targetSeconds to a number in the written JSON (template keeps it
+      // quoted so a missed fill never produces invalid JSON).
+      const parsed = JSON.parse(out);
+      parsed.targetSeconds = targetSeconds;
+      out = JSON.stringify(parsed, null, 2) + '\n';
+    }
+    fs.writeFileSync(path.join(paths.root, name), out);
   }
 
   return {
@@ -83,7 +104,8 @@ export function initProject(dir, opts = {}) {
     size,
     theme,
     lang,
-    message: `created ${displayPath(paths.root)} (${lang}, ${size}, ${theme})`,
+    targetSeconds,
+    message: `created ${displayPath(paths.root)} (${lang}, ${size}, ${theme}, ~${targetSeconds}s)`,
   };
 }
 

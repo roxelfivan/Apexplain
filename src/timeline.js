@@ -3,6 +3,7 @@
  * Letter rate and spread follow explainroo's Kokoro-tuned constants.
  */
 import { speechChunks } from './script.js';
+import { cueTargets } from './scenes.js';
 
 const LETTERS_A_SECOND = 12.7;
 /** Approximate HK Cantonese speaking rate (Han chars / sec) for estimates. */
@@ -41,6 +42,29 @@ const VOICE_RATES = {
 
 const tenth = (v) => Math.round(v * 10) / 10;
 const round3 = (v) => Math.round(v * 1000) / 1000;
+
+function buildItemCues(layout, { marks, sentences, lead, sentenceStartsAreAbsolute = false }) {
+  const targets = cueTargets(layout);
+  return targets.map((item, i) => {
+    let at;
+    if (item.marker != null && marks[item.marker] != null) {
+      at = marks[item.marker];
+    } else if (item.at != null && sentences[item.at]) {
+      at = sentenceStartsAreAbsolute
+        ? sentences[item.at].start
+        : lead + sentences[item.at].start;
+    } else if (layout.cue === 'sentence' && sentences[i]) {
+      at = sentenceStartsAreAbsolute ? sentences[i].start : lead + sentences[i].start;
+    } else {
+      at = lead;
+    }
+    return {
+      item: i,
+      at: round3(at),
+      text: item.text ?? item.label ?? '',
+    };
+  });
+}
 
 function spokenWordCount(text, lang = 'en') {
   if (lang === 'zh-HK') {
@@ -239,22 +263,7 @@ export function buildEstimatedTimeline({ script, video, scenes: layouts }) {
 
     // Layout cues: sentence index or marker → time within scene.
     const layout = layouts?.[scene.id];
-    const itemCues = [];
-    if (layout && Array.isArray(layout.items)) {
-      layout.items.forEach((item, i) => {
-        let at;
-        if (item.marker != null && marks[item.marker] != null) {
-          at = marks[item.marker];
-        } else if (item.at != null && sentences[item.at]) {
-          at = lead + sentences[item.at].start;
-        } else if (layout.cue === 'sentence' && sentences[i]) {
-          at = lead + sentences[i].start;
-        } else {
-          at = lead;
-        }
-        itemCues.push({ item: i, at: round3(at), text: item.text });
-      });
-    }
+    const itemCues = buildItemCues(layout, { marks, sentences, lead });
 
     outScenes.push({
       id: scene.id,
@@ -345,22 +354,12 @@ export function buildMeasuredTimeline({ script, video, scenes: layouts }, voices
     }));
 
     const layout = layouts?.[scene.id];
-    const itemCues = [];
-    if (layout && Array.isArray(layout.items)) {
-      layout.items.forEach((item, i) => {
-        let at;
-        if (item.marker != null && marks[item.marker] != null) {
-          at = marks[item.marker];
-        } else if (item.at != null && sentences[item.at]) {
-          at = sentences[item.at].start;
-        } else if (layout.cue === 'sentence' && sentences[i]) {
-          at = sentences[i].start;
-        } else {
-          at = lead;
-        }
-        itemCues.push({ item: i, at: round3(at), text: item.text });
-      });
-    }
+    const itemCues = buildItemCues(layout, {
+      marks,
+      sentences,
+      lead,
+      sentenceStartsAreAbsolute: true,
+    });
 
     outScenes.push({
       id: scene.id,

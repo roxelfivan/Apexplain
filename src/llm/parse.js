@@ -1,7 +1,9 @@
 /**
  * Parse Autogenerate LLM output into script.md + scenes.json.
  */
+import { hasClipart, resolveClipartName } from '../clipart.js';
 import { ApexError } from '../errors.js';
+import { coerceIconName, hasIcon } from '../icons.js';
 import { parseScript } from '../script.js';
 import { crossCheck, validateScenes } from '../scenes.js';
 
@@ -127,6 +129,40 @@ export function extractJsonObject(text) {
 }
 
 /**
+ * Models often put Lucide names in `clipart` (e.g. "map"). Remap aliases,
+ * move Lucide-only names to `icon`, or drop unknown clipart.
+ * Also coerce `icon` to the allowlist (alias → canonical, unknown → drop).
+ */
+function coerceClipartFields(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const next = { ...obj };
+  if (next.icon != null && next.icon !== '') {
+    const icon = coerceIconName(next.icon);
+    if (icon) next.icon = icon;
+    else delete next.icon;
+  } else {
+    delete next.icon;
+  }
+  if (next.clipart == null || next.clipart === '') {
+    delete next.clipart;
+    return next;
+  }
+  const resolved = resolveClipartName(next.clipart);
+  if (resolved) {
+    next.clipart = resolved;
+    return next;
+  }
+  // Lucide icon mistaken for clipart → keep as icon if possible.
+  if (hasIcon(next.clipart)) {
+    if (!next.icon) next.icon = coerceIconName(next.clipart) || String(next.clipart).replace(/_/g, '-');
+    delete next.clipart;
+    return next;
+  }
+  delete next.clipart;
+  return next;
+}
+
+/**
  * MiniMax often puts narration text in `cue` instead of the literal "sentence".
  * Coerce at the LLM boundary; hand-authored scenes.json stays strict in validateScenes.
  */
@@ -138,9 +174,22 @@ export function normalizeLlmScenes(scenes) {
       out[id] = scene;
       continue;
     }
-    const next = { ...scene };
+    let next = coerceClipartFields({ ...scene });
+    if (Array.isArray(next.items)) {
+      next.items = next.items.map((it) => coerceClipartFields(it));
+    }
+    if (next.left) next.left = coerceClipartFields(next.left);
+    if (next.right) next.right = coerceClipartFields(next.right);
+
     const layout = String(next.layout || '');
-    const hasItems = layout === 'cards' || layout === 'steps' || layout === 'flow';
+    const hasItems =
+      layout === 'cards' ||
+      layout === 'steps' ||
+      layout === 'flow' ||
+      layout === 'chart' ||
+      layout === 'compare' ||
+      layout === 'timeline' ||
+      layout === 'funnel';
     if (next.cue !== undefined && next.cue !== null) {
       if (hasItems) {
         // Any non-empty cue means "reveal by sentence"; only "sentence" is valid.
@@ -151,6 +200,15 @@ export function normalizeLlmScenes(scenes) {
     } else if (hasItems && next.cue == null) {
       // Default for item layouts so reveals work without the model remembering the enum.
       next.cue = 'sentence';
+    }
+    // Dense item layouts overflow when every row carries clipart — keep Lucide icons.
+    const denseItemLayouts = new Set(['flow', 'steps', 'timeline', 'funnel', 'cards']);
+    if (denseItemLayouts.has(layout) && Array.isArray(next.items) && next.items.length >= 4) {
+      next.items = next.items.map((it) => {
+        if (!it || typeof it !== 'object' || !it.clipart) return it;
+        const { clipart: _drop, ...rest } = it;
+        return rest;
+      });
     }
     out[id] = next;
   }

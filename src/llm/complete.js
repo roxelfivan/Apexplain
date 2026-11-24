@@ -28,7 +28,7 @@ export function llmReady(settings = loadLlmSettings()) {
   return { ok: false, provider: settings.provider, detail: 'unknown LLM provider' };
 }
 
-export async function completeChat(messages, { log = () => {}, settings, signal } = {}) {
+export async function completeChat(messages, { log = () => {}, settings, signal, maxTokens } = {}) {
   const cfg = settings || loadLlmSettings();
   const ready = llmReady(cfg);
   if (!ready.ok) {
@@ -39,8 +39,9 @@ export async function completeChat(messages, { log = () => {}, settings, signal 
       hint: ready.fix,
     });
   }
+  const opts = { log, signal, maxTokens };
   if (usesLocalGemma(cfg.provider)) {
-    return completeGemma(messages, cfg, { log, signal });
+    return completeGemma(messages, cfg, opts);
   }
-  return completeMinimax(messages, cfg, { log, signal });
+  return completeMinimax(messages, cfg, opts);
 }

@@ -164,6 +164,34 @@ docs/apexplain-token-mvp.md # this plan
 
 Whisper/word cues, agent still/sheet vision, Rough.js/MathJax/camera director, paid TTS/images/clips, publish/share, product-demo `record`, Mandarin-as-Cantonese, motion blur, 54-voice catalog in the skill. Forking explainroo or matching its look frame-for-frame is also out of scope.
 
+## Visual richness follow-ons (canvas, then Remotion-heavy)
+
+Canvas layouts already cover the a2e §4 relations that fit `@napi-rs/canvas` without a full Remotion stack:
+
+| a2e relation | Apexplain layout |
+| --- | --- |
+| Ordered process | `steps` / `flow` |
+| Two lists / tradeoff | `compare` |
+| Parts of a subject | `cards` |
+| Big number | `stat` |
+| Trend / curve | `chart` |
+| Time axis / history | `timeline` |
+| Source / takeaway line | `quote` |
+| Funnel / filter | `funnel` |
+| Merge / pipeline | `flow` (+ `nodes` / `stack` clipart) |
+
+### Later phase — Remotion-heavy presentations (deferred)
+
+Keep these for a dedicated later phase (after chrome / skill polish). They need richer motion, depth, or per-token animation that fights the token-cheap canvas MVP:
+
+- [ ] **Point cloud / proximity** — grid plane + neighbor rings (a2e vector-space shots)
+- [ ] **Tilted layers / depth planes** — skew/perspective stacks with path draw-on
+- [ ] **Network / relation graph** — node light-up + edge draw-on + community rings
+- [ ] **Formula token stream** — per-token reveal with result emphasis
+- [ ] **LightSweep set-pieces** — multi-bar sweep + stage line + ghost text (a2e hero entrance; budget ≤2/film)
+
+Until that phase, approximate with existing layouts (`cards`/`flow`/`stat`/`quote`) + clipart; do not invent Remotion-only JSON fields.
+
 ## Dependency map
 
 ```mermaid

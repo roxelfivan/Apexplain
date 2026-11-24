@@ -13,6 +13,92 @@ function slugify(input) {
   return s;
 }
 
+function clampTargetSeconds(raw) {
+  if (raw == null || raw === '') return null;
+  // Leftover template fill must not count as a length.
+  if (typeof raw === 'string' && /\{\{/.test(raw)) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(Math.min(600, Math.max(15, n)));
+}
+
+/**
+ * Repair common template leftovers like `"targetSeconds": {{targetSeconds}}`
+ * or `"targetSeconds": "{{targetSeconds}}"` from a stale init.
+ */
+function repairVideoJsonText(text) {
+  let s = String(text || '');
+  const fromInput = clampTargetSeconds($('targetSeconds')?.value) ?? 60;
+  s = s.replace(
+    /("targetSeconds"\s*:\s*)"\{\{\s*targetSeconds\s*\}\}"/gi,
+    `$1${fromInput}`,
+  );
+  s = s.replace(
+    /("targetSeconds"\s*:\s*)\{\{\s*targetSeconds\s*\}\}/gi,
+    `$1${fromInput}`,
+  );
+  s = s.replace(/\{\{\s*targetSeconds\s*\}\}/gi, String(fromInput));
+  // Other leftover {{placeholders}} → empty string so JSON can parse.
+  s = s.replace(/\{\{\s*(\w+)\s*\}\}/g, '""');
+  return s;
+}
+
+/** Coerce video.targetSeconds; rewrite quoted template leftovers into a number. */
+function normalizeVideoTargetSeconds(video, fallback = 60) {
+  const t = clampTargetSeconds(video?.targetSeconds) ?? fallback;
+  if (video && video.targetSeconds !== t) video.targetSeconds = t;
+  return t;
+}
+
+function parseVideoEditor() {
+  const raw = $('videoEditor').value;
+  let video;
+  try {
+    video = JSON.parse(raw);
+  } catch {
+    const repaired = repairVideoJsonText(raw);
+    video = JSON.parse(repaired);
+    $('videoEditor').value = JSON.stringify(video, null, 2) + '\n';
+  }
+  // Quoted "{{targetSeconds}}" parses as JSON but is not a real length — fix in place.
+  if (typeof video.targetSeconds === 'string' && /\{\{/.test(video.targetSeconds)) {
+    const repaired = repairVideoJsonText(JSON.stringify(video));
+    video = JSON.parse(repaired);
+    normalizeVideoTargetSeconds(video, clampTargetSeconds($('targetSeconds')?.value) ?? 60);
+    $('videoEditor').value = JSON.stringify(video, null, 2) + '\n';
+  }
+  return video;
+}
+
+/** Pull targetSeconds from video.json textarea into the number input. */
+function syncTargetSecondsFromEditor() {
+  const input = $('targetSeconds');
+  if (!input) return;
+  try {
+    const video = parseVideoEditor();
+    const n = clampTargetSeconds(video.targetSeconds);
+    if (n != null) input.value = String(n);
+  } catch {
+    /* leave input as-is while JSON is mid-edit */
+  }
+}
+
+/** Write the number input into video.json textarea (keeps other fields). */
+function syncTargetSecondsToEditor() {
+  const input = $('targetSeconds');
+  if (!input) return;
+  const n = clampTargetSeconds(input.value) ?? 60;
+  let video;
+  try {
+    video = parseVideoEditor();
+  } catch {
+    return;
+  }
+  video.targetSeconds = n;
+  input.value = String(n);
+  $('videoEditor').value = JSON.stringify(video, null, 2) + '\n';
+}
+
 const DESKTOP_MQ = window.matchMedia('(min-width: 768px)');
 const TRASH_ICON =
   '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m1 0-.9 14H8.9L8 6m-3 0 1 14h12l1-14"/></svg>';
@@ -241,7 +327,31 @@ function showEmpty({ fromHash = false } = {}) {
   if (!fromHash) syncHash(null);
 }
 
-async function openProject(name, { fromHash = false } = {}) {
+/** Ensure Project → Target length box + video.json agree; default 60 when missing. */
+function ensureTargetSeconds(preferred = null) {
+  const input = $('targetSeconds');
+  let video;
+  try {
+    video = parseVideoEditor();
+  } catch {
+    const t = clampTargetSeconds(preferred) ?? clampTargetSeconds(input?.value) ?? 60;
+    if (input) input.value = String(t);
+    return t;
+  }
+  // Prefer explicit preferred (create form / box), then the Target length box, then video.json.
+  const t =
+    clampTargetSeconds(preferred) ??
+    clampTargetSeconds(input?.value) ??
+    clampTargetSeconds(video.targetSeconds) ??
+    60;
+  normalizeVideoTargetSeconds(video, t);
+  video.targetSeconds = t;
+  if (input) input.value = String(t);
+  $('videoEditor').value = JSON.stringify(video, null, 2) + '\n';
+  return t;
+}
+
+async function openProject(name, { fromHash = false, targetSeconds = null } = {}) {
   current = name;
   const data = await api(`/api/projects/${encodeURIComponent(name)}/files`);
   $('empty').classList.add('hidden');
@@ -249,14 +359,15 @@ async function openProject(name, { fromHash = false } = {}) {
   $('projectTitle').textContent = name;
   closeNav();
   if (!fromHash) syncHash(name);
+  $('videoEditor').value = data.video;
   let lang = 'en';
+  const t = ensureTargetSeconds(targetSeconds);
   try {
-    lang = JSON.parse(data.video).lang || 'en';
+    lang = parseVideoEditor().lang || 'en';
   } catch {
     /* ignore */
   }
-  $('projectMeta').textContent = `lang=${lang} · click tabs to edit files`;
-  $('videoEditor').value = data.video;
+  $('projectMeta').textContent = `lang=${lang} · ~${t}s · click tabs to edit files`;
   if ($('storyboardEditor')) $('storyboardEditor').value = data.storyboard || '';
   $('scriptEditor').value = data.script;
   $('scenesEditor').value = data.scenes;
@@ -289,21 +400,25 @@ async function createProject() {
   }
 
   $('createBtn').disabled = true;
+  const createdTarget = clampTargetSeconds($('newTargetSeconds')?.value) ?? 60;
   try {
-    await api('/api/projects', {
+    const created = await api('/api/projects', {
       method: 'POST',
       body: JSON.stringify({
         name,
         title: title || name,
         lang: $('newLang').value,
         size: $('newSize').value,
+        targetSeconds: createdTarget,
       }),
     });
     $('newName').value = '';
     $('newTitle').value = '';
     $('newName').placeholder = 'auto from title (a-z, 0-9, -)';
     await refreshProjects();
-    await openProject(name);
+    // Carry create-form Target length into Project → Target length (seconds).
+    const t = clampTargetSeconds(created?.targetSeconds) ?? createdTarget;
+    await openProject(name, { targetSeconds: t });
     closeNav();
   } catch (e) {
     const hint = e.body?.hint ? ` ${e.body.hint}` : '';
@@ -315,6 +430,7 @@ async function createProject() {
 
 async function saveProject() {
   if (!current) return;
+  syncTargetSecondsToEditor();
   await api(`/api/projects/${encodeURIComponent(current)}/files`, {
     method: 'PUT',
     body: JSON.stringify({
@@ -328,8 +444,11 @@ async function saveProject() {
   log('saved', 'ok');
   revealOutput();
   try {
-    const lang = JSON.parse($('videoEditor').value).lang || 'en';
-    $('projectMeta').textContent = `lang=${lang} · click tabs to edit files`;
+    const video = JSON.parse($('videoEditor').value);
+    const lang = video.lang || 'en';
+    const t = clampTargetSeconds(video.targetSeconds);
+    $('projectMeta').textContent =
+      `lang=${lang}${t != null ? ` · ~${t}s` : ''} · click tabs to edit files`;
   } catch {
     /* ignore */
   }
@@ -344,18 +463,27 @@ async function autogenerate() {
   try {
     let video;
     try {
-      video = JSON.parse($('videoEditor').value);
+      video = parseVideoEditor();
     } catch {
-      throw new Error('video.json is not valid JSON — fix it in the video.json tab first');
+      throw new Error('video.json is not valid JSON — fix it in the Project tab first');
+    }
+    // Canonical: Project tab → Target length (seconds) box.
+    const targetSeconds = ensureTargetSeconds(clampTargetSeconds($('targetSeconds')?.value));
+    try {
+      video = parseVideoEditor();
+    } catch {
+      throw new Error('video.json is not valid JSON — fix it in the Project tab first');
     }
     const title = video.title || current;
     const lang = video.lang || 'en';
     const storyboard = $('storyboardEditor') ? $('storyboardEditor').value : '';
+    log(`Target length ${targetSeconds}s (Project tab)…`);
     const data = await api(`/api/projects/${encodeURIComponent(current)}/generate`, {
       method: 'POST',
-      body: JSON.stringify({ title, lang, storyboard }),
+      body: JSON.stringify({ title, lang, storyboard, targetSeconds }),
     });
     $('videoEditor').value = data.video;
+    ensureTargetSeconds(targetSeconds);
     if ($('storyboardEditor') && data.storyboard != null) {
       $('storyboardEditor').value = data.storyboard;
     }
@@ -373,7 +501,10 @@ async function autogenerate() {
         : '';
     const boardNote = storyboard.trim() ? ' · from storyboard' : '';
     setOutputStatus('generated', 'ok');
-    log(`Autogenerated${subj}${src}${shape}${boardNote}. Review script.md, then Make video.`, 'ok');
+    log(
+      `Autogenerated${subj}${src}${shape}${boardNote} · target ~${targetSeconds}s. Review script.md, then Make video.`,
+      'ok',
+    );
     revealOutput();
   } catch (e) {
     setOutputStatus('error', 'err');
@@ -520,6 +651,14 @@ $('newTitle').addEventListener('input', () => {
     $('newName').placeholder = slugify($('newTitle').value) || 'auto from title';
   }
 });
+
+if ($('targetSeconds')) {
+  $('targetSeconds').addEventListener('change', () => syncTargetSecondsToEditor());
+  $('targetSeconds').addEventListener('blur', () => syncTargetSecondsToEditor());
+}
+if ($('videoEditor')) {
+  $('videoEditor').addEventListener('input', () => syncTargetSecondsFromEditor());
+}
 
 let settingsCache = null;
 let settingsClearKey = false;

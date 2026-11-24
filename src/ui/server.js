@@ -307,6 +307,7 @@ async function handleApi(req, res, url) {
         lang: body.lang || 'en',
         size: body.size || '16:9',
         theme: body.theme || 'studio',
+        targetSeconds: body.targetSeconds,
       });
       return sendJson(res, 200, { ...result, name });
     }
@@ -337,6 +338,14 @@ async function handleApi(req, res, url) {
       video.title = title;
       video.lang = lang;
       if (lang === 'zh-HK') video.voice = video.voice || 'vocello';
+      // Prefer body (UI Target length box); fall back to video.json; default 60.
+      const rawTarget =
+        body.targetSeconds !== undefined && body.targetSeconds !== null && body.targetSeconds !== ''
+          ? Number(body.targetSeconds)
+          : Number(video.targetSeconds);
+      video.targetSeconds = Number.isFinite(rawTarget)
+        ? Math.round(Math.min(600, Math.max(15, rawTarget)))
+        : 60;
       let storyboard =
         body.storyboard != null
           ? String(body.storyboard)
@@ -354,6 +363,7 @@ async function handleApi(req, res, url) {
         title,
         lang,
         storyboard,
+        targetSeconds: video.targetSeconds,
         log: (line) => logs.push(String(line)),
       });
       const videoText = JSON.stringify(video, null, 2) + '\n';

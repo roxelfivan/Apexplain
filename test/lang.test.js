@@ -13,8 +13,13 @@ import {
   extractSubject,
   generateExplainer,
   layoutFor,
+  contentQuota,
+  lengthGuidance,
+  middleCountForTarget,
   planOutline,
+  scaleMiddles,
   sceneRelation,
+  sentencesPerMiddle,
   shortLabel,
 } from '../src/generate.js';
 import { toTradHk, zhHkCopy } from '../src/zh.js';
@@ -99,6 +104,52 @@ describe('autogenerate outline', () => {
     assert.ok(!ids.includes('example'));
   });
 
+  it('scales middle beat count from targetSeconds', () => {
+    assert.equal(middleCountForTarget(30), 1);
+    assert.equal(middleCountForTarget(60), 4);
+    assert.equal(middleCountForTarget(120), 9);
+    assert.equal(middleCountForTarget(600), 12);
+    assert.equal(sentencesPerMiddle(60), 3);
+    assert.equal(sentencesPerMiddle(100), 4);
+    assert.equal(sentencesPerMiddle(180), 5);
+
+    const short = planOutline({
+      intent: 'definition',
+      topic: 'What is a cat?',
+      subject: 'cat',
+      lang: 'en',
+      targetSeconds: 30,
+    });
+    assert.equal(short.filter((b) => b.role === 'middle').length, 1);
+
+    const long = planOutline({
+      intent: 'definition',
+      topic: 'What is a cat?',
+      subject: 'cat',
+      lang: 'en',
+      targetSeconds: 120,
+    });
+    assert.equal(long.filter((b) => b.role === 'middle').length, 9);
+
+    const scaled = scaleMiddles(
+      [{ heading: 'A' }, { heading: 'B' }],
+      4,
+      { intent: 'topic', name: 'DNS', lang: 'en' },
+    );
+    assert.equal(scaled.length, 4);
+    assert.ok(scaled.every((m) => m.heading));
+
+    const q = contentQuota(90, 'en');
+    assert.equal(q.target, 90);
+    assert.equal(q.perMiddle, 4);
+    assert.ok(q.words > 140);
+    const guide = lengthGuidance(90, 'en');
+    assert.match(guide, /90s/);
+    assert.match(guide, /HARD length/);
+    assert.match(guide, /minWords/);
+    assert.match(guide, /≥4/);
+  });
+
   it('maps layouts like explainroo picture relationships', () => {
     assert.equal(sceneRelation('how', 'how it works'), 'order');
     assert.equal(layoutFor('how', 'How it works'), 'steps');
@@ -109,7 +160,13 @@ describe('autogenerate outline', () => {
     assert.equal(sceneRelation('why', 'the cause'), 'cause');
     assert.equal(layoutFor('why', 'The cause'), 'flow');
     assert.equal(sceneRelation('topic', '1000000 requests'), 'number');
-    assert.equal(layoutFor('topic', '1000000 requests'), 'title');
+    assert.equal(layoutFor('topic', '1000000 requests'), 'stat');
+    assert.equal(sceneRelation('history', 'Where DNS began'), 'timeline');
+    assert.equal(layoutFor('history', 'Where DNS began'), 'timeline');
+    assert.equal(sceneRelation('topic', 'Relative cost chart'), 'trend');
+    assert.equal(layoutFor('topic', 'Relative cost chart'), 'chart');
+    assert.equal(sceneRelation('topic', 'Filter with a funnel'), 'filter');
+    assert.equal(layoutFor('topic', 'Filter with a funnel'), 'funnel');
   });
 
   it('keeps scene labels as complete phrases, never mid-word ellipsis', () => {
@@ -144,6 +201,15 @@ describe('autogenerate outline', () => {
       assert.ok(!/etymolog|taxonom|notice how it connects/i.test(stub.script));
       assert.ok(!/Why leap years exist exists/i.test(stub.script));
       assert.match(stub.outline.map((b) => b.heading).join(' '), /why leap years happens|seems odd/i);
+
+      const longStub = await generateExplainer({
+        title: 'Why leap years exist',
+        lang: 'en',
+        targetSeconds: 120,
+      });
+      assert.equal(longStub.outline.filter((b) => b.role === 'middle').length, 9);
+      assert.match(longStub.script, /about 2 minutes/i);
+      assert.match(longStub.script, /\[#detail\]/);
     } finally {
       if (prev == null) delete process.env.APEXPLAIN_LLM;
       else process.env.APEXPLAIN_LLM = prev;

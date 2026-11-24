@@ -144,6 +144,32 @@ describe('normalizeLlmScenes', () => {
     assert.equal(n.open.cue, undefined);
     assert.equal(n.mid.cue, 'sentence');
   });
+
+  it('remaps Lucide-ish clipart names like map → globe-wire', () => {
+    const n = normalizeLlmScenes({
+      mid: { layout: 'steps', items: [{ text: 'Tokyo', clipart: 'map' }] },
+    });
+    assert.equal(n.mid.items[0].clipart, 'globe-wire');
+  });
+
+  it('strips item clipart on dense flow/steps lists to avoid overflow', () => {
+    const n = normalizeLlmScenes({
+      a: {
+        layout: 'flow',
+        cue: 'sentence',
+        items: [
+          { text: 'A', icon: 'plane', clipart: 'nodes' },
+          { text: 'B', icon: 'map', clipart: 'stack' },
+          { text: 'C', icon: 'train' },
+          { text: 'D', icon: 'bus', clipart: 'nodes' },
+        ],
+      },
+    });
+    assert.equal(n.a.items[0].clipart, undefined);
+    assert.equal(n.a.items[0].icon, 'plane');
+    assert.equal(n.a.items[3].clipart, undefined);
+    assert.equal(n.a.items[2].icon, 'train-front');
+  });
 });
 
 describe('storyboard outline', () => {
@@ -172,6 +198,11 @@ describe('storyboard outline', () => {
     });
     assert.match(msgs[1].content, /storyboard/);
     assert.match(msgs[1].content, /Whiskers and claws/);
+    // System prompt is derived from skills/apexplain/SKILL.md
+    assert.match(msgs[0].content, /Apexplain skill/);
+    assert.match(msgs[0].content, /Never invent numbers/);
+    assert.match(msgs[0].content, /Layouts/);
+    assert.match(msgs[0].content, /clipart/);
   });
 
   it('passes storyboard into generateExplainer complete()', async () => {
@@ -246,6 +277,40 @@ describe('generateExplainer LLM backend', () => {
     const g = await generateExplainer({ title: 'What is a cat?', complete });
     assert.equal(calls, 2);
     assert.match(g.script, /Hello cat/);
+  });
+
+  it('puts hard length + minSentences into the first draft prompt (no length rewrite)', async () => {
+    let calls = 0;
+    let firstUser = '';
+    let system = '';
+    const complete = async (msgs) => {
+      calls += 1;
+      system = msgs.find((m) => m.role === 'system')?.content || '';
+      firstUser = msgs.find((m) => m.role === 'user')?.content || '';
+      return JSON.stringify({
+        script:
+          '# Cat\n\n## open\n[#hook] Cats are companions. [#angle] People keep them.\n\n' +
+          '## close {hold=1}\n[#close] Thanks. [#thanks] Bye.\n',
+        scenes: {
+          open: { layout: 'title', title: 'Cat', subtitle: 'Pet' },
+          close: { layout: 'title', title: 'Thanks', subtitle: 'Bye' },
+        },
+      });
+    };
+    const g = await generateExplainer({
+      title: 'What is a cat?',
+      lang: 'en',
+      targetSeconds: 90,
+      complete,
+    });
+    assert.equal(calls, 1);
+    assert.equal(g.lengthRewritten, undefined);
+    assert.match(firstUser, /HARD length requirement/i);
+    assert.match(firstUser, /minSentences/i);
+    assert.match(firstUser, /minWords/i);
+    assert.match(firstUser, /scriptSkeleton/i);
+    assert.match(firstUser, /"targetSeconds": 90/);
+    assert.match(system, /LENGTH \(read first/i);
   });
 });
 

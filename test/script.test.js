@@ -53,6 +53,21 @@ describe('tokenizeNarration', () => {
       ['word', 'mark', 'word', 'pause', 'word'],
     );
   });
+
+  it('treats brace groups without | as plain text (LLM-friendly)', () => {
+    const units = tokenizeNarration('Visit {Tokyo} next.');
+    assert.equal(
+      units.filter((u) => u.type === 'word').map((u) => u.display).join(' '),
+      'Visit Tokyo next.',
+    );
+  });
+
+  it('still applies {shown|spoken} pronunciation overrides', () => {
+    const units = tokenizeNarration('{API|A P I} rocks.');
+    const words = units.filter((u) => u.type === 'word');
+    assert.equal(words[0].display, 'API');
+    assert.equal(words[0].spoken, 'A P I');
+  });
 });
 
 describe('speechChunks', () => {

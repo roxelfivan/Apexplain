@@ -5,13 +5,13 @@ import { parseScript } from '../src/script.js';
 import { crossCheck, validateScenes } from '../src/scenes.js';
 
 describe('validateScenes', () => {
-  it('accepts the five layouts', () => {
+  it('accepts the core layouts including stat and chart', () => {
     const scenes = validateScenes({
-      a: { layout: 'title', title: 'Hi', subtitle: 'there' },
+      a: { layout: 'title', title: 'Hi', subtitle: 'there', clipart: 'stack' },
       b: {
         layout: 'steps',
         cue: 'sentence',
-        items: [{ icon: 'globe', text: 'One' }],
+        items: [{ icon: 'globe', clipart: 'db', text: 'One' }],
       },
       c: {
         layout: 'cards',
@@ -19,15 +19,43 @@ describe('validateScenes', () => {
       },
       d: {
         layout: 'compare',
-        left: { title: 'A', text: 'left' },
+        left: { title: 'A', text: 'left', clipart: 'doc' },
         right: { text: 'right', icon: 'check' },
       },
       e: {
         layout: 'flow',
-        items: [{ text: 'Step' }, { text: 'Next', at: 0 }],
+        items: [{ text: 'Step', clipart: 'funnel' }, { text: 'Next', at: 0 }],
+      },
+      f: {
+        layout: 'stat',
+        value: '42',
+        unit: '%',
+        caption: 'Hit rate',
+        clipart: 'bars',
+      },
+      g: {
+        layout: 'chart',
+        kind: 'bar',
+        title: 'Cost',
+        series: [
+          { label: 'A', value: 1 },
+          { label: 'B', value: 3 },
+        ],
+        highlight: 1,
       },
     });
-    assert.equal(Object.keys(scenes).length, 5);
+    assert.equal(Object.keys(scenes).length, 7);
+  });
+
+  it('rejects unknown clipart', () => {
+    assert.throws(
+      () => validateScenes({ intro: { layout: 'title', title: 'x', clipart: 'unicorn' } }),
+      (err) => {
+        assert.equal(err.path, 'scenes.json/intro/clipart');
+        assert.equal(err.rule, 'clipart');
+        return true;
+      },
+    );
   });
 
   it('rejects unknown layout with path+rule', () => {

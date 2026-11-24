@@ -100,14 +100,26 @@ export function tokenizeNarration(text, line = 0) {
       const end = text.indexOf('}', i);
       const inner = end === -1 ? '' : text.slice(i + 1, end);
       const bar = inner.indexOf('|');
-      if (end === -1 || bar === -1 || !inner.slice(0, bar).trim() || !inner.slice(bar + 1).trim()) {
-        scriptFail('pronunciation overrides look like {shown|spoken}', line, 'override');
+      const shown = bar === -1 ? '' : inner.slice(0, bar).trim();
+      const spoken = bar === -1 ? '' : inner.slice(bar + 1).trim();
+      // Valid pronunciation override: {shown|spoken}
+      if (end !== -1 && bar !== -1 && shown && spoken) {
+        let j = end + 1;
+        while (j < n && !/\s/.test(text[j]) && text[j] !== '[' && text[j] !== '{') j++;
+        const trail = text.slice(end + 1, j);
+        pushWord(shown + trail, spoken + trail);
+        i = j;
+        continue;
       }
-      let j = end + 1;
-      while (j < n && !/\s/.test(text[j]) && text[j] !== '[' && text[j] !== '{') j++;
-      const trail = text.slice(end + 1, j);
-      pushWord(inner.slice(0, bar).trim() + trail, inner.slice(bar + 1).trim() + trail);
-      i = j;
+      // Lenient: LLMs often write {Tokyo} or stray braces — treat as plain text.
+      if (end === -1) {
+        pushWord('{', '{');
+        i += 1;
+        continue;
+      }
+      const literal = inner.trim();
+      if (literal) pushWord(literal, literal);
+      i = end + 1;
       continue;
     }
     let j = i;

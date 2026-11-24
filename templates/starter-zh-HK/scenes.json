@@ -11,7 +11,10 @@
       { "icon": "lightbulb", "text": "第一個重點" },
       { "icon": "list", "text": "第二個重點" },
       { "icon": "check", "text": "第三個重點" }
-    ]
+    ],
+    "motion": {
+      "stagger": 0.06
+    }
   },
   "outro": {
     "layout": "title",

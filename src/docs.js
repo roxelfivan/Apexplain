@@ -6,7 +6,7 @@ import { DOCS_DIR, ROOT } from './paths.js';
 const TOPICS = {
   plan: {
     file: 'apexplain-token-mvp.md',
-    summary: 'Phased MVP plan: product target, architecture, Phase 1–6',
+    summary: 'Phased MVP plan: product target, architecture, Phase 1–6 + Remotion-heavy later',
   },
   settings: {
     file: 'settings.md',
@@ -21,14 +21,14 @@ Apexplain turns \`script.md\` + \`scenes.json\` into a narrated MP4.
 
 1. Read \`skills/apexplain/SKILL.md\` (or \`apexplain docs overview\`).
 2. \`apexplain init videos/<name> --title "..." --lang en|zh-HK\`
-3. Edit \`script.md\` (45–90s) and \`scenes.json\` (5 layouts).
+3. Edit \`script.md\` (45–90s) and \`scenes.json\` (layouts).
 4. \`apexplain make videos/<name> --dry-run\` then \`apexplain make videos/<name>\`.
 5. Or open the UI: \`apexplain ui --port 3847\`. Settings (gear) chooses **Local Gemma** or a **MiniMax API key** for Autogenerate.
 
 \`lang=en\` → local Kokoro. \`lang=zh-HK\` → local Vocello CLI (Voice Design + Cantonese brief; \`npm run setup:vocello\` or UI Settings).
-TTS/LLM weights are **not in git** — download on demand. Make/TTS are local-first (HF only with \`APEXPLAIN_ALLOW_HF=1\`). Autogenerate uses the Settings LLM (local Gemma or MiniMax).
+TTS/LLM weights are **not in git** — download on demand. Make/TTS are local-first (HF only with \`APEXPLAIN_ALLOW_HF=1\`). Autogenerate uses the Settings LLM (local Gemma or MiniMax) and **injects \`skills/apexplain/SKILL.md\` into the model system prompt** when writing script + scenes.
 
-Layouts: \`title\`, \`cards\`, \`steps\`, \`compare\`, \`flow\`. Output: \`out/video.mp4\`.
+Layouts: \`title\`, \`cards\`, \`steps\`, \`compare\`, \`flow\`, \`stat\`, \`chart\`, \`timeline\`, \`quote\`, \`funnel\` (optional \`clipart\` on items). Output: \`out/video.mp4\`.
 `,
   },
 };

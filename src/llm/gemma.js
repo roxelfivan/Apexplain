@@ -106,15 +106,17 @@ function toGemmaPrompt(messages) {
   return parts.join('\n');
 }
 
-export async function completeGemma(messages, _settings, { log = () => {}, signal } = {}) {
+export async function completeGemma(messages, _settings, { log = () => {}, signal, maxTokens } = {}) {
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
   const generator = await loadGemma({ log });
   const prompt = toGemmaPrompt(messages);
-  log('llm: local Gemma generating…');
+  // Default was 1600 — far too small for targetSeconds-sized script.md + scenes.json.
+  const tokens = Math.max(1600, Math.min(8192, Number(maxTokens) || 3200));
+  log(`llm: local Gemma generating (max_new_tokens=${tokens})…`);
   const out = await generator(prompt, {
-    max_new_tokens: 1600,
+    max_new_tokens: tokens,
     temperature: 0.2,
     do_sample: false,
     return_full_text: false,

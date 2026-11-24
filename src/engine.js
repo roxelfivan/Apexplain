@@ -3,9 +3,11 @@
  */
 import { createCanvas } from '@napi-rs/canvas';
 import { ApexError } from './errors.js';
+import { CLIPART_NAMES, hasClipart } from './clipart.js';
 import { hasIcon } from './icons.js';
 import { renderLayout } from './layouts.js';
-import { frameSize, getTheme, safeArea, typeScale } from './theme.js';
+import { resolveMotion } from './motion.js';
+import { drawBackdrop, frameSize, getTheme, safeArea, typeScale } from './theme.js';
 
 export function createFrameContext(video) {
   const { width, height } = frameSize(video.size);
@@ -29,7 +31,32 @@ function assertIcons(sceneId, layout) {
         code: 'bad_icon',
         path: f.path,
         rule: 'icon',
-        hint: 'Use a Lucide name from the Apexplain subset (globe, calendar, check, …).',
+        hint:
+          'Use a Lucide name from the Apexplain subset (globe, calendar, train, route, coffee, utensils, check, …), or set "clipart" instead (db, stack, funnel, …).',
+      });
+    }
+  }
+}
+
+function assertClipart(sceneId, layout) {
+  const fields = [];
+  if (layout.clipart) fields.push({ name: layout.clipart, path: `scenes.json/${sceneId}/clipart` });
+  for (const [i, it] of (layout.items || []).entries()) {
+    if (it.clipart) fields.push({ name: it.clipart, path: `scenes.json/${sceneId}/items/${i}/clipart` });
+  }
+  if (layout.left?.clipart) {
+    fields.push({ name: layout.left.clipart, path: `scenes.json/${sceneId}/left/clipart` });
+  }
+  if (layout.right?.clipart) {
+    fields.push({ name: layout.right.clipart, path: `scenes.json/${sceneId}/right/clipart` });
+  }
+  for (const f of fields) {
+    if (!hasClipart(f.name)) {
+      throw new ApexError(`unknown clipart "${f.name}"`, {
+        code: 'bad_clipart',
+        path: f.path,
+        rule: 'clipart',
+        hint: `Use one of: ${CLIPART_NAMES.join(', ')}.`,
       });
     }
   }
@@ -47,9 +74,10 @@ export function drawSceneFrame(ctx, { video, sceneId, layout, sceneTimeline = nu
     });
   }
   assertIcons(sceneId, layout);
-  ctx.fillStyle = theme.bg;
-  ctx.fillRect(0, 0, width, height);
+  assertClipart(sceneId, layout);
+  drawBackdrop(ctx, width, height, theme);
   const els = [];
+  const motion = resolveMotion(video?.motion, layout.motion);
   renderLayout(ctx, layout, {
     safe,
     theme,
@@ -58,6 +86,7 @@ export function drawSceneFrame(ctx, { video, sceneId, layout, sceneTimeline = nu
     sceneLocalT: t,
     sceneTimeline,
     lang: video?.lang || 'en',
+    motion,
     els,
   });
   return els;

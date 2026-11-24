@@ -9,7 +9,7 @@ import { previewProject } from './preview.js';
 const HELP = `apexplain ${packageVersion()} — agent-run explainer videos
 
 Usage:
-  apexplain init <dir> [--title TEXT] [--lang en|zh-HK] [--size 16:9|9:16] [--theme studio|dark]
+  apexplain init <dir> [--title TEXT] [--lang en|zh-HK] [--size 16:9|9:16] [--theme studio|dark] [--target-seconds N]
   apexplain make <dir> [--draft] [--force] [--json]
   apexplain make <dir> --dry-run [--json]
   apexplain make <dir> --estimate [--json]
@@ -45,6 +45,7 @@ function parseArgs(argv) {
     else if (a === '--lang') flags.lang = argv[++i];
     else if (a === '--size') flags.size = argv[++i];
     else if (a === '--theme') flags.theme = argv[++i];
+    else if (a === '--target-seconds') flags.targetSeconds = argv[++i];
     else if (a === '--port') flags.port = argv[++i];
     else if (a === '--help' || a === '-h') flags.help = true;
     else if (a === '--version' || a === '-V') flags.version = true;
@@ -92,6 +93,7 @@ export async function run(argv) {
         lang: flags.lang,
         size: flags.size,
         theme: flags.theme,
+        targetSeconds: flags.targetSeconds,
       });
       report(json ? result : result.message, { json });
       return;

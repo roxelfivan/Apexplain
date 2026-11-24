@@ -21,14 +21,14 @@ function run(args) {
 const video = { size: '16:9', theme: 'studio' };
 
 describe('renderSceneFrame', () => {
-  it('renders each of the five layouts to a PNG', () => {
+  it('renders each layout including stat, chart, and clipart to a PNG', () => {
     const layouts = {
-      title: { layout: 'title', title: 'Hello', subtitle: 'World' },
+      title: { layout: 'title', title: 'Hello', subtitle: 'World', clipart: 'stack' },
       cards: {
         layout: 'cards',
         items: [
           { icon: 'globe', text: 'One' },
-          { icon: 'calendar', text: 'Two' },
+          { clipart: 'db', text: 'Two' },
         ],
       },
       steps: {
@@ -36,17 +36,58 @@ describe('renderSceneFrame', () => {
         cue: 'sentence',
         items: [
           { icon: 'lightbulb', text: 'First' },
-          { icon: 'list', text: 'Second' },
+          { clipart: 'funnel', text: 'Second' },
         ],
       },
       compare: {
         layout: 'compare',
-        left: { title: 'A', text: 'Left side' },
+        left: { title: 'A', text: 'Left side', clipart: 'doc' },
         right: { title: 'B', text: 'Right side', icon: 'check' },
       },
       flow: {
         layout: 'flow',
-        items: [{ text: 'Start' }, { text: 'Middle' }, { text: 'End' }],
+        items: [
+          { text: 'Start', clipart: 'magnifier' },
+          { text: 'Middle', clipart: 'stack' },
+          { text: 'End', clipart: 'db' },
+        ],
+      },
+      stat: {
+        layout: 'stat',
+        value: '~2 ms',
+        unit: 'hit',
+        caption: 'Cache latency',
+        clipart: 'globe-wire',
+      },
+      chartBar: {
+        layout: 'chart',
+        kind: 'bar',
+        title: 'Cost',
+        series: [
+          { label: 'Hit', value: 1 },
+          { label: 'Miss', value: 12 },
+          { label: 'Avg', value: 3 },
+        ],
+        highlight: 0,
+      },
+      chartLine: {
+        layout: 'chart',
+        kind: 'line',
+        series: [
+          { label: 'Mon', value: 2 },
+          { label: 'Tue', value: 5 },
+          { label: 'Wed', value: 4 },
+        ],
+      },
+      chartPie: {
+        layout: 'chart',
+        kind: 'pie',
+        series: [
+          { label: 'A', value: 40 },
+          { label: 'B', value: 35 },
+          { label: 'C', value: 25 },
+        ],
+        highlight: 0,
       },
     };
 
@@ -64,6 +105,23 @@ describe('renderSceneFrame', () => {
     }
   });
 
+  it('rejects unknown clipart with path+rule', () => {
+    assert.throws(
+      () =>
+        renderSceneFrame({
+          video,
+          sceneId: 'main',
+          layout: { layout: 'stat', value: '1', clipart: 'not-real' },
+        }),
+      (err) => {
+        assert.ok(err instanceof ApexError);
+        assert.equal(err.rule, 'clipart');
+        assert.equal(err.path, 'scenes.json/main/clipart');
+        return true;
+      },
+    );
+  });
+
   it('rejects unknown icons with path+rule', () => {
     assert.throws(
       () =>
@@ -79,6 +137,15 @@ describe('renderSceneFrame', () => {
         return true;
       },
     );
+  });
+
+  it('accepts legacy Lucide aliases like home → house', () => {
+    const frame = renderSceneFrame({
+      video,
+      sceneId: 'main',
+      layout: { layout: 'steps', items: [{ icon: 'home', text: 'Stay' }] },
+    });
+    assert.ok(frame.png.length > 100);
   });
 });
 
