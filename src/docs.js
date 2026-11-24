@@ -19,10 +19,10 @@ Apexplain turns \`script.md\` + \`scenes.json\` into a narrated MP4.
 2. \`apexplain init videos/<name> --title "..." --lang en|zh-HK\`
 3. Edit \`script.md\` (45–90s) and \`scenes.json\` (5 layouts).
 4. \`apexplain make videos/<name> --dry-run\` then \`apexplain make videos/<name>\`.
-5. Or open the UI: \`apexplain ui --port 3847\`.
+5. Or open the UI: \`apexplain ui --port 3847\`. Settings (gear) chooses **Local Gemma** or a **MiniMax API key** for Autogenerate.
 
 \`lang=en\` → local Kokoro. \`lang=zh-HK\` → local Vocello CLI (Voice Design + Cantonese brief; \`npm run setup:vocello\`).
-Make/TTS are local-first (HF only with \`APEXPLAIN_ALLOW_HF=1\`). Autogenerate may use Wikipedia for on-topic copy.
+Make/TTS are local-first (HF only with \`APEXPLAIN_ALLOW_HF=1\`). Autogenerate uses the Settings LLM (local Gemma or MiniMax).
 
 Layouts: \`title\`, \`cards\`, \`steps\`, \`compare\`, \`flow\`. Output: \`out/video.mp4\`.
 `,

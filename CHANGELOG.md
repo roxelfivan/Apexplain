@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.4 — 2026-11-24
+
+### Added
+- UI **Settings** page (gear): **Local Gemma** (~2 GB ONNX) or **MiniMax API key**, following [apeditor](https://github.com/roxelfivan/apeditor)
+- Autogenerate is an LLM step: Gemma on-device or MiniMax Chat Completions; JSON `{ script, scenes }` validated against Apexplain schema
+- `npm run setup:gemma`; settings file `~/.config/apexplain/llm.json` (0600)
+
+### Changed
+- Autogenerate no longer writes scripts from Wikipedia (outline intent is unchanged; copy comes from the Settings LLM)
+- `APEXPLAIN_LLM=mock` keeps stub Autogenerate for tests
+
 ## 0.0.3 — 2026-11-24
 
 ### Added

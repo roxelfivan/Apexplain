@@ -1,6 +1,6 @@
 {
   "name": "apexplain",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Agent-run explainer videos with a tiny skill and declarative scenes.",
   "type": "module",
   "bin": {
@@ -33,7 +33,8 @@
     "ui": "node bin/apexplain.js ui --port 3847",
     "test": "node --test test/*.test.js",
     "setup:vocello": "bash scripts/setup_vocello.sh",
-    "setup:kokoro": "node scripts/setup_kokoro.mjs"
+    "setup:kokoro": "node scripts/setup_kokoro.mjs",
+    "setup:gemma": "node scripts/setup_gemma.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",

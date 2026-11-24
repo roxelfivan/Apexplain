@@ -10,8 +10,12 @@
     <div class="app">
       <aside class="sidebar">
         <header class="brand">
-          <h1>Apexplain</h1>
+          <div class="brand-row">
+            <h1>Apexplain</h1>
+            <button id="settingsBtn" type="button" class="icon-btn" title="Settings (LLM)">⚙</button>
+          </div>
           <p class="muted" id="version">…</p>
+          <p class="muted" id="llmStatus">LLM: …</p>
         </header>
 
         <section>
@@ -75,7 +79,8 @@
 
           <p class="hint">
             Edit the tabs below, click <strong>Save</strong>, then <strong>Make video</strong>.
-            <strong>Autogenerate</strong> rewrites script + scenes from the title in <code>video.json</code>.
+            <strong>Autogenerate</strong> uses the LLM in <strong>Settings</strong> (local Gemma or MiniMax)
+            to rewrite script + scenes from the title in <code>video.json</code>.
           </p>
 
           <div class="tabs" role="tablist">
@@ -109,6 +114,59 @@
           </section>
         </div>
       </main>
+    </div>
+    <div id="settingsModal" class="modal hidden" role="dialog" aria-labelledby="settingsTitle" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h2 id="settingsTitle">Settings</h2>
+          <button id="settingsClose" type="button" class="icon-btn" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <label
+            >Provider
+            <select id="llmProvider"></select>
+          </label>
+          <p id="llmHelp" class="hint"></p>
+
+          <div id="minimaxFields" class="hidden">
+            <label
+              >API key
+              <span class="key-row">
+                <input id="llmApiKey" type="password" autocomplete="off" spellcheck="false" />
+                <button id="llmShowKey" type="button" class="secondary">Show</button>
+              </span>
+            </label>
+            <p class="hint">
+              Stored only in <code>~/.config/apexplain/llm.json</code> on this machine (mode 0600). Sent as
+              <code>Authorization: Bearer</code> to the HTTPS endpoint. Do not leave a key on a shared computer.
+            </p>
+            <button id="llmClearKey" type="button" class="secondary">Clear saved key</button>
+            <label
+              >API endpoint
+              <input id="llmEndpoint" spellcheck="false" />
+            </label>
+            <label
+              >Model
+              <input id="llmModel" list="llmModelList" spellcheck="false" />
+            </label>
+            <datalist id="llmModelList"></datalist>
+          </div>
+
+          <div id="gemmaFields" class="hidden">
+            <p id="gemmaStatus" class="hint">Checking Local Gemma…</p>
+            <div class="actions">
+              <button id="gemmaDownload" type="button" class="primary">Download from Hugging Face</button>
+              <a id="gemmaHfLink" class="btn-link" href="https://huggingface.co/onnx-community/gemma-2-2b-it-ONNX" target="_blank" rel="noopener noreferrer">Open on Hugging Face</a>
+            </div>
+            <pre id="gemmaLog" class="log gemma-log hidden"></pre>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button id="settingsCancel" type="button">Cancel</button>
+          <button id="settingsSave" type="button" class="primary">Save</button>
+        </div>
+        <p id="settingsError" class="err banner hidden"></p>
+      </div>
     </div>
     <script src="/app.js" type="module"></script>
   </body>

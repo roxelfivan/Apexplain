@@ -3,6 +3,8 @@ import path from 'node:path';
 import { packageVersion, ROOT } from './paths.js';
 import { probeKokoro } from './models.js';
 import { ffmpegVersion } from './ffmpeg.js';
+import { llmReady } from './llm/complete.js';
+import { loadLlmSettings } from './llm/config.js';
 import { probeVocello } from './tts/vocello.js';
 import { resolveTextFont } from './fonts.js';
 
@@ -95,7 +97,8 @@ function checkLocalPolicy() {
   const offline = process.env.APEXPLAIN_OFFLINE === '1';
   const parts = [];
   parts.push(allowHf ? 'HF download ON' : 'TTS local-only');
-  parts.push(offline ? 'autogenerate stub-only' : 'autogenerate may use Wikipedia');
+  const llm = process.env.APEXPLAIN_LLM === 'mock' ? 'autogenerate stub (LLM=mock)' : 'autogenerate uses Settings LLM';
+  parts.push(offline ? `${llm}; APEXPLAIN_OFFLINE=1` : llm);
   return {
     name: 'local',
     ok: true,
@@ -110,10 +113,20 @@ function checkLocalPolicy() {
 export function doctor(opts = {}) {
   const lang = opts.lang || 'en';
   const needZh = lang === 'zh-HK';
+  const llm = llmReady(loadLlmSettings());
   const checks = [
     checkNode(),
     checkLocalPolicy(),
     checkKokoro(),
+    {
+      name: 'llm',
+      ok: true,
+      required: false,
+      detail: llm.ok
+        ? `${llm.provider}: ${llm.detail}`
+        : `${llm.provider}: Autogenerate not ready — ${llm.detail}`,
+      ...(llm.ok ? {} : { fix: llm.fix }),
+    },
     checkFfmpeg(),
     checkVocello({ required: needZh }),
     checkCjkFont({ required: needZh }),

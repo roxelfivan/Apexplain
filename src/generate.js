@@ -1,13 +1,14 @@
 /**
  * Autogenerate ~1 min script + scenes from a topic title.
- * Outline is chosen from title intent + Wikipedia sections (not a fixed template).
- * Layout pick follows explainroo `docs pictures`: which relationship does the
- * scene show — an order, a comparison, the parts of a whole, or a cause —
- * mapped onto Apexplain's declarative layouts.
- * zh-HK: Wikipedia zh + OpenCC cn→hk so script/scenes stay Traditional (HK).
- * Autogenerate tries Wikipedia for on-topic sentences (unless APEXPLAIN_OFFLINE=1),
- * then falls back to intent stubs that still name the subject. Make/TTS stay local.
+ * Outline is chosen from title intent (not a fixed Wikipedia TOC).
+ * Copy comes from the Settings LLM (local Gemma or MiniMax). Stubs only when
+ * APEXPLAIN_LLM=mock. Layout pick follows explainroo `docs pictures`.
+ * zh-HK: Traditional Chinese (HK) on-screen and in the prompt.
  */
+import { completeChat, llmReady } from './llm/complete.js';
+import { loadLlmSettings } from './llm/config.js';
+import { parseLlmExplainer } from './llm/parse.js';
+import { ApexError } from './errors.js';
 import { toTradHk, zhHkCopy } from './zh.js';
 
 const WIKI_UA = 'Apexplain/0.0.1 (local explainer; https://github.com/roxelfivan/Apexplain)';
@@ -61,20 +62,127 @@ export function detectIntent(title) {
   return 'topic';
 }
 
+function useStubLlm() {
+  return process.env.APEXPLAIN_LLM === 'mock';
+}
+
+export function buildExplainerMessages({ topic, subject, intent, outline, lang = 'en' }) {
+  const zh = lang === 'zh-HK';
+  const beats = (outline || []).map((b) => ({
+    id: b.id,
+    role: b.role,
+    heading: b.heading,
+    layout: b.layout,
+  }));
+  const system = [
+    'You write Apexplain explainer videos.',
+    'Return ONLY a JSON object: { "script": string, "scenes": object }.',
+    'script.md rules: one "# Title", then "## scene-id" blocks. 45–90 seconds. Short sentences. One idea per scene.',
+    'Use [#marker] names like [#hook] [#point] [#fact] [#more] [#close]. Optional {shown|spoken} and [pause].',
+    zh
+      ? 'Language: Traditional Chinese (Hong Kong). End every sentence with 。！ or ？. Spoken Cantonese-friendly 粵語 is ok on-screen as 繁體.'
+      : 'Language: English.',
+    'Never invent precise statistics. If a number is uncertain, speak qualitatively.',
+    'scenes.json: one object per script scene id. layout must be title | cards | steps | compare | flow.',
+    'title: { "layout":"title", "title":"...", "subtitle":"..." } — no items.',
+    'steps/cards/flow: { "layout":"...", "cue":"sentence", "items":[{ "icon":"globe", "text":"..." }] }.',
+    'compare: { "layout":"compare", "left":{ "title":"A", "text":"..." }, "right":{ "title":"B", "text":"..." } } — no items.',
+    'Icons must be one of: globe, calendar, clock, lightbulb, list, check, arrow-right, arrow-left, star, heart, zap, book, code, cpu, database, file, folder, home, image, link, mail, map, message-circle, play, search, settings, shield, user, users, video, triangle-alert, x, plus, minus, info, sparkles, rocket, target, layers, git-branch.',
+    'cue:"sentence" reveals item i when sentence i starts. Match item count to sentence count in that scene.',
+    'Follow the given outline ids and suggested layouts unless a layout is clearly wrong for the beat.',
+  ].join('\n');
+  const user = JSON.stringify(
+    {
+      title: topic,
+      subject,
+      intent,
+      lang: zh ? 'zh-HK' : 'en',
+      outline: beats,
+    },
+    null,
+    2,
+  );
+  return [
+    { role: 'system', content: system },
+    {
+      role: 'user',
+      content: `Write script.md + scenes.json for this explainer.\n${user}`,
+    },
+  ];
+}
+
 /**
- * @param {{ title: string, lang?: string }} opts
+ * @param {{ title: string, lang?: string, complete?: Function, log?: Function }} opts
  */
-export async function generateExplainer({ title, lang = 'en' }) {
+export async function generateExplainer({ title, lang = 'en', complete, log = () => {} } = {}) {
   const topic = String(title || 'this topic').trim() || 'this topic';
   const subject = extractSubject(topic);
   const intent = detectIntent(topic);
-  const facts = await lookupTopic(subject, lang).catch(() => null);
-  const outline = planOutline({ intent, topic, subject, facts, lang });
-  return buildFromOutline({ topic, subject, intent, facts, outline, lang });
+  const outline = planOutline({ intent, topic, subject, facts: null, lang });
+
+  if (useStubLlm() && !complete) {
+    return buildFromOutline({ topic, subject, intent, facts: null, outline, lang });
+  }
+
+  const settings = loadLlmSettings();
+  if (!complete) {
+    const ready = llmReady(settings);
+    if (!ready.ok) {
+      throw new ApexError(ready.detail, {
+        code: 'llm_config',
+        path: 'settings',
+        rule: 'llm',
+        hint: ready.fix || 'Open the UI Settings page (gear) to choose Local Gemma or paste a MiniMax API key.',
+      });
+    }
+  }
+
+  const messages = buildExplainerMessages({ topic, subject, intent, outline, lang });
+  const run = complete || ((msgs, opts) => completeChat(msgs, opts));
+  log(`autogenerate: ${complete ? 'injected' : settings.provider} · ${intent} · ${subject}`);
+
+  let text = await run(messages, { log, settings });
+  try {
+    const parsed = parseLlmExplainer(text);
+    return {
+      script: parsed.script,
+      scenes: parsed.scenes,
+      source: complete ? 'injected' : settings.provider,
+      subject,
+      intent,
+      outline: outline.map((b) => ({ id: b.id, role: b.role, heading: b.heading, layout: b.layout })),
+      notes: parsed.notes,
+    };
+  } catch (first) {
+    log(`autogenerate: invalid JSON, retrying (${first.message})`);
+    text = await run(
+      [
+        ...messages,
+        { role: 'assistant', content: String(text || '') },
+        {
+          role: 'user',
+          content:
+            `The previous reply was invalid (${first.message}). Reply with ONLY valid JSON: ` +
+            `{ "script": "...markdown...", "scenes": { ... } }. No markdown fences if possible.`,
+        },
+      ],
+      { log, settings },
+    );
+    const parsed = parseLlmExplainer(text);
+    return {
+      script: parsed.script,
+      scenes: parsed.scenes,
+      source: complete ? 'injected' : settings.provider,
+      subject,
+      intent,
+      outline: outline.map((b) => ({ id: b.id, role: b.role, heading: b.heading, layout: b.layout })),
+      notes: parsed.notes,
+    };
+  }
 }
 
 async function lookupTopic(subject, lang) {
-  // Make/TTS stay local; Autogenerate may use Wikipedia for topic facts.
+  // Unused by Autogenerate (LLM backend). Kept for stub/fact helpers and tests.
   if (process.env.APEXPLAIN_OFFLINE === '1') return null;
   if (lang === 'zh-HK') {
     const zhTitle = await resolveZhTitle(subject);
