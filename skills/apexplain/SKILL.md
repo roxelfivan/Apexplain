@@ -34,10 +34,24 @@ In a checkout: `node bin/apexplain.js …`.
 
 ## Files
 
-- `video.json` — title, lang, size `16:9|9:16`, theme `studio|dark`, optional `targetSeconds` (15–600; rough finished length), optional `motion` (see below)
+- `video.json` — title, lang, size `16:9|9:16`, theme `studio|dark`, optional `targetSeconds` (15–600; rough finished length), optional `motion` (see below), optional chrome `progress` / `chapters` (see below)
 - `storyboard.md` — optional beats / shot list; Autogenerate uses it as the outline base when non-empty
 - `script.md` — `## scene-id`, `[#marker]`, `[pause]`; optional `{shown|spoken}` only for TTS pronunciation (e.g. `{API|A P I}`). Do not wrap ordinary words in `{…}`.
 - `scenes.json` — one layout per scene id; optional per-scene `motion` overrides `video.json`
+
+## Chrome (optional, off by default)
+
+`video.json` may add a bottom chapter/progress strip. It sits **below** the safe area, so scene content stays clear; burned-in captions lift above it.
+
+```json
+"progress": true,
+"chapters": ["Intro", "Why it works", "Takeaway"]
+```
+
+- `progress` — `true` draws the strip; `false`/absent keeps the plain frame (default)
+- `chapters` — optional labels. Without them, chapter names come from `storyboard.md` `##` headings; without those, it is a plain progress bar
+- Chapters split the scenes evenly, so 3 labels over 6 scenes = 2 scenes each
+- Do not set `progress` in every project — it is chrome, not content
 
 ## Motion (prefer explicit)
 

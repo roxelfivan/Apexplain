@@ -136,3 +136,14 @@ node bin/apexplain.js preview videos/demo            # still PNGs in build/still
 ```
 
 `APEXPLAIN_TTS=mock` skips real TTS (tests). Example project: `examples/leap-years`.
+
+### Optional chrome
+
+Add a bottom chapter/progress strip (off by default):
+
+```json
+{ "progress": true, "chapters": ["Intro", "Why it works", "Takeaway"] }
+```
+
+The strip sits below the safe area, so scene content stays clear; burned-in captions lift above it.
+Leave `chapters` out and names come from `storyboard.md` `##` headings.

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Phase 3 chrome**: opt-in bottom chapter/progress strip — `video.json` → `"progress": true` plus optional `"chapters": [...]` (labels fall back to `storyboard.md` `##` headings)
+- Project UI: **Progress strip** checkbox + **Chapters** field next to Target length
+- Stronger burned-in captions: rounded scrim, hairline edge, soft shadow; captions lift above the chrome strip
+
 ## 0.0.6 — 2026-11-24
 
 ### Added

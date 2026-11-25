@@ -19,20 +19,37 @@ export function captionAt(scene, localT) {
   return cur.text;
 }
 
-export function drawCaption(ctx, text, { width, height, theme, lang = 'en' }) {
+function roundRectPath(ctx, x, y, w, h, r) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+/**
+ * Burned-in caption. Phase 3: stronger contrast (rounded scrim + edge + shadow)
+ * and optional bottom inset so the chrome strip stays clear.
+ */
+export function drawCaption(ctx, text, { width, height, theme, lang = 'en', bottomInset = 0 }) {
   if (!text) return;
   const maxW = width * 0.82;
-  const fontSize = Math.round(Math.min(width, height) * 0.035);
+  const fontSize = Math.round(Math.min(width, height) * 0.038);
   ctx.save();
   ctx.font = fontCss(700, fontSize, lang);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
   const lines = wrapText(ctx, text, maxW);
 
-  const lineH = fontSize * 1.25;
+  const lineH = fontSize * 1.28;
   const blockH = lines.length * lineH + fontSize * 0.5;
-  const y0 = height * 0.78;
-  const padX = fontSize * 0.6;
+  // Lift captions above the Phase 3 chrome strip when it is on.
+  const y0 = Math.max(height * 0.24, height * 0.78 - (Number(bottomInset) || 0));
+  const padX = fontSize * 0.62;
+  const padY = fontSize * 0.42;
   const boxW = Math.min(
     maxW + padX * 2,
     lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0) + padX * 2,
@@ -40,9 +57,20 @@ export function drawCaption(ctx, text, { width, height, theme, lang = 'en' }) {
   const boxX = (width - boxW) / 2;
   const boxY = y0 - blockH;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(boxX, boxY, boxW, blockH + fontSize * 0.25);
-  ctx.fillStyle = theme?.ink === '#1a1d24' ? '#ffffff' : '#ffffff';
+  // Scrim: rounded, slightly stronger than a plain bar.
+  ctx.fillStyle = 'rgba(8,10,14,0.68)';
+  roundRectPath(ctx, boxX, boxY, boxW, blockH + fontSize * 0.25, fontSize * 0.32);
+  ctx.fill();
+  // Hairline edge separates the scrim from light scenes.
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.lineWidth = Math.max(1, Math.round(fontSize * 0.03));
+  ctx.stroke();
+
+  // Text with a soft shadow so glyphs stay readable over busy art.
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = Math.round(fontSize * 0.22);
+  ctx.shadowOffsetY = Math.round(fontSize * 0.05);
+  ctx.fillStyle = '#ffffff';
   lines.forEach((l, i) => {
     ctx.fillText(l, width / 2, y0 - (lines.length - 1 - i) * lineH);
   });

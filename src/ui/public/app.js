@@ -83,6 +83,44 @@ function syncTargetSecondsFromEditor() {
   }
 }
 
+/** Pull Phase 3 chrome flags (progress strip + chapters) from video.json. */
+function syncChromeFromEditor() {
+  const chapters = $('chapters');
+  const progress = $('progressChrome');
+  try {
+    const video = parseVideoEditor();
+    if (chapters) {
+      const list = Array.isArray(video.chapters)
+        ? video.chapters.map((c) => (typeof c === 'string' ? c : c?.label || '')).filter(Boolean)
+        : [];
+      chapters.value = list.join(', ');
+    }
+    if (progress) progress.checked = video.progress === true;
+  } catch {
+    /* leave inputs as-is while JSON is mid-edit */
+  }
+}
+
+/** Write chrome flags from the UI into video.json. */
+function syncChromeToEditor() {
+  const chapters = $('chapters');
+  const progress = $('progressChrome');
+  let video;
+  try {
+    video = parseVideoEditor();
+  } catch {
+    return;
+  }
+  const list = String(chapters?.value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (list.length) video.chapters = list;
+  else delete video.chapters;
+  video.progress = Boolean(progress?.checked);
+  $('videoEditor').value = JSON.stringify(video, null, 2) + '\n';
+}
+
 /** Write the number input into video.json textarea (keeps other fields). */
 function syncTargetSecondsToEditor() {
   const input = $('targetSeconds');
@@ -350,7 +388,6 @@ function ensureTargetSeconds(preferred = null) {
   $('videoEditor').value = JSON.stringify(video, null, 2) + '\n';
   return t;
 }
-
 async function openProject(name, { fromHash = false, targetSeconds = null } = {}) {
   current = name;
   const data = await api(`/api/projects/${encodeURIComponent(name)}/files`);
@@ -362,6 +399,7 @@ async function openProject(name, { fromHash = false, targetSeconds = null } = {}
   $('videoEditor').value = data.video;
   let lang = 'en';
   const t = ensureTargetSeconds(targetSeconds);
+  syncChromeFromEditor();
   try {
     lang = parseVideoEditor().lang || 'en';
   } catch {
@@ -431,6 +469,7 @@ async function createProject() {
 async function saveProject() {
   if (!current) return;
   syncTargetSecondsToEditor();
+  syncChromeToEditor();
   await api(`/api/projects/${encodeURIComponent(current)}/files`, {
     method: 'PUT',
     body: JSON.stringify({
@@ -484,6 +523,7 @@ async function autogenerate() {
     });
     $('videoEditor').value = data.video;
     ensureTargetSeconds(targetSeconds);
+    syncChromeFromEditor();
     if ($('storyboardEditor') && data.storyboard != null) {
       $('storyboardEditor').value = data.storyboard;
     }
@@ -656,8 +696,18 @@ if ($('targetSeconds')) {
   $('targetSeconds').addEventListener('change', () => syncTargetSecondsToEditor());
   $('targetSeconds').addEventListener('blur', () => syncTargetSecondsToEditor());
 }
+if ($('chapters')) {
+  $('chapters').addEventListener('change', () => syncChromeToEditor());
+  $('chapters').addEventListener('blur', () => syncChromeToEditor());
+}
+if ($('progressChrome')) {
+  $('progressChrome').addEventListener('change', () => syncChromeToEditor());
+}
 if ($('videoEditor')) {
-  $('videoEditor').addEventListener('input', () => syncTargetSecondsFromEditor());
+  $('videoEditor').addEventListener('input', () => {
+    syncTargetSecondsFromEditor();
+    syncChromeFromEditor();
+  });
 }
 
 let settingsCache = null;

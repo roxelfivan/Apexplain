@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas } from '@napi-rs/canvas';
 import { captionAt, drawCaption, toSrt } from './captions.js';
+import { chapterAt, chromeGeometry, drawProgressChrome, resolveChapters } from './chrome.js';
 import { createFrameContext, drawSceneFrame } from './engine.js';
 import { ApexError } from './errors.js';
 import { frameEncoder, runFfmpeg } from './ffmpeg.js';
@@ -100,6 +101,21 @@ export async function renderVideo(project, timeline, { draft = false, log = () =
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
+  // Phase 3 chrome: opt-in chapter/progress strip below the safe area.
+  const chapters = resolveChapters({
+    video: project.video,
+    timeline,
+    storyboard: project.storyboard || '',
+  });
+  const geo = chromeGeometry({ width, height, safe, type });
+  const captionInset = chapters.enabled ? geo.inset : 0;
+  if (chapters.enabled) {
+    log(
+      `render: chrome on — ${chapters.items.length} chapter(s)` +
+        (chapters.items.some((c) => c.label) ? '' : ' (progress bar only)'),
+    );
+  }
+
   log(`render: ${frames} frames at ${fps} fps (${width}x${height})` + (draft ? ' draft' : ''));
   const enc = frameEncoder({ fps, out: videoOnly, draft });
   const t0 = Date.now();
@@ -121,12 +137,26 @@ export async function renderVideo(project, timeline, { draft = false, log = () =
         safe,
         type,
       });
+      if (chapters.enabled) {
+        drawProgressChrome(ctx, {
+          chapters,
+          progress: timeline.duration ? t / timeline.duration : 0,
+          chapterIndex: chapterAt(chapters, t),
+          width,
+          height,
+          theme,
+          safe,
+          type,
+          lang: project.video.lang || 'en',
+        });
+      }
       if (burnCaptions) {
         drawCaption(ctx, captionAt(sc, localT), {
           width,
           height,
           theme,
           lang: project.video.lang || 'en',
+          bottomInset: captionInset,
         });
       }
       await enc.write(canvas.toBuffer('image/jpeg', draft ? 70 : 85));

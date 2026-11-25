@@ -185,6 +185,24 @@
                 <p id="targetSecondsHint" class="hint">
                   Set when you create the project. Autogenerate uses this box for script length; dry-run compares against it.
                 </p>
+                <label for="chapters"
+                  >Chapters (comma-separated)
+                  <input
+                    id="chapters"
+                    type="text"
+                    placeholder="Intro, Why it works, Takeaway"
+                    autocomplete="off"
+                    aria-describedby="chaptersHint"
+                  />
+                </label>
+                <label class="check-row" for="progressChrome">
+                  <input id="progressChrome" type="checkbox" autocomplete="off" />
+                  <span>Progress strip</span>
+                </label>
+                <p id="chaptersHint" class="hint">
+                  Optional. Progress strip draws a bottom chapter bar (chapter names come from
+                  <code>storyboard.md</code> headings when these are blank).
+                </p>
               </div>
               <label for="videoEditor">Project JSON (title, lang, size, voice, targetSeconds…)</label>
               <textarea id="videoEditor" spellcheck="false" autocomplete="off"></textarea>

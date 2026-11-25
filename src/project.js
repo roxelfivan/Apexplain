@@ -83,6 +83,29 @@ function validateVideo(video) {
   }
   const lang = video.lang || 'en';
   const defaultVoice = lang === 'zh-HK' ? 'vocello' : 'af_heart';
+  if (video.progress !== undefined && typeof video.progress !== 'boolean') {
+    throw new ApexError('video.json/progress must be true or false', {
+      code: 'bad_video',
+      path: 'video.json/progress',
+      rule: 'boolean',
+    });
+  }
+  let chapters = null;
+  if (video.chapters !== undefined && video.chapters !== null) {
+    if (!Array.isArray(video.chapters)) {
+      throw new ApexError('video.json/chapters must be an array of labels', {
+        code: 'bad_video',
+        path: 'video.json/chapters',
+        rule: 'array',
+        hint: 'Example: "chapters": ["Intro", "Why it works", "Takeaway"]',
+      });
+    }
+    chapters = video.chapters
+      .map((c) => (typeof c === 'string' ? c : c?.label || c?.title || ''))
+      .map((s) => String(s).trim())
+      .filter(Boolean);
+    if (!chapters.length) chapters = null;
+  }
   return {
     title: typeof video.title === 'string' ? video.title : null,
     lang,
@@ -100,6 +123,9 @@ function validateVideo(video) {
     paragraphGap: Number.isFinite(video.paragraphGap) ? video.paragraphGap : 0.55,
     targetSeconds,
     captions: video.captions ?? 'auto',
+    /** Phase 3 chrome: opt-in progress strip + chapter labels. */
+    progress: video.progress === true,
+    chapters,
     /** Resolved motion defaults (video.json/motion merged onto built-ins). */
     motion: resolveMotion(video.motion),
     raw: video,
@@ -131,8 +157,12 @@ export function loadProject(dir) {
   const script = parseScript(fs.readFileSync(paths.script, 'utf8'));
   const scenes = validateScenes(readJson(paths.scenes, 'scenes.json'));
   const notes = crossCheck(script, scenes);
+  // Optional storyboard — used for Phase 3 chapter labels.
+  const storyboard = fs.existsSync(paths.storyboard)
+    ? fs.readFileSync(paths.storyboard, 'utf8')
+    : '';
 
-  return { paths, video, script, scenes, notes };
+  return { paths, video, script, scenes, notes, storyboard };
 }
 
 export function displayPath(abs) {
