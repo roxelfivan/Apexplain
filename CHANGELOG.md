@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.0.6 — 2026-11-25
+## 0.0.7 — 2026-11-25
+
+### Added
+- **Phase 3 chrome**: opt-in bottom chapter/progress strip — `video.json` → `"progress": true` plus optional `"chapters": [...]` (labels fall back to `storyboard.md` `##` headings)
+- Project UI: **Progress strip** checkbox + **Chapters** field next to Target length
+- Stronger burned-in captions: rounded scrim, hairline edge, soft shadow; captions lift above the chrome strip
+- Track the visual richness phase plan in-repo (`.cursor/plans/`)
+
+### Changed
+- Chrome stays **off by default** — it is structure, not content
+
+## 0.0.6 — 2026-11-24
 
 ### Added
 - **Clipart** registry for mechanism glyphs (`db`, `funnel`, `nodes`, `stack`, …) alongside Lucide `icon` accents
@@ -8,9 +19,6 @@
 - **Motion** on scenes and `video.json`: SoftIn fade/slide, stagger, draw-on, count-up (`src/motion.js`)
 - **`targetSeconds`** (15–600) in templates, Project UI, CLI `--target-seconds`, and Autogenerate length budgeting
 - Autogenerate scales middle-beat count and per-beat `minSentences` / `minWords` from target length; skill-driven system prompt
-- **Phase 3 chrome**: opt-in bottom chapter/progress strip — `video.json` → `"progress": true` plus optional `"chapters": [...]` (labels fall back to `storyboard.md` `##` headings)
-- Project UI: **Progress strip** checkbox + **Chapters** field next to Target length
-- Stronger burned-in captions: rounded scrim, hairline edge, soft shadow; captions lift above the chrome strip
 - Charts demo example (`examples/charts-demo`)
 
 ### Changed
@@ -20,7 +28,6 @@
 - Lucide icon allowlist expanded (~200 names) with aliases for common model synonyms (`train`→`train-front`, `route`, travel/food/money icons, …)
 - Dense item layouts: strip per-item clipart when lists are long; flow/timeline shrink or stack to stay in the safe area
 - Skill + docs: size speech to `targetSeconds`, always emit per-scene `motion`, prefer clipart for mechanisms
-- Chrome stays **off by default** — it is structure, not content
 
 ### Fixed
 - Stale `"targetSeconds": "{{targetSeconds}}"` leftovers leaving the Target length field empty

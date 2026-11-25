@@ -1,6 +1,6 @@
 {
   "name": "apexplain",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Agent-run explainer videos with a tiny skill and declarative scenes.",
   "type": "module",
   "bin": {
